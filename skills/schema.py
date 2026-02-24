@@ -7,9 +7,9 @@ models at db.py init time.
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Annotated, Literal, Union
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Discriminator, Tag
 
 
 class OutputDef(BaseModel):
@@ -60,3 +60,61 @@ class OpenAIConfig(BaseModel):
     prompt: str
     model: str | None = None
     reads_from: list[str] = []
+
+
+# ---------------------------------------------------------------------------
+# Task models (one per execution type) and discriminated union
+# ---------------------------------------------------------------------------
+
+class _TaskBase(BaseModel):
+    """Common fields for all task types."""
+    description: str
+    depends_on: list[str] = []
+    outputs: dict[str, OutputDef] = {}
+
+
+class PythonTask(_TaskBase):
+    type: Literal["python"]
+    config: PythonConfig
+
+
+class ClaudeTask(_TaskBase):
+    type: Literal["claude"]
+    config: ClaudeConfig
+
+
+class ShellTask(_TaskBase):
+    type: Literal["shell"]
+    config: ShellConfig
+
+
+class PerplexityTask(_TaskBase):
+    type: Literal["perplexity"]
+    config: PerplexityConfig
+
+
+class OpenAITask(_TaskBase):
+    type: Literal["openai"]
+    config: OpenAIConfig
+
+
+Task = Annotated[
+    Union[
+        Annotated[PythonTask, Tag("python")],
+        Annotated[ClaudeTask, Tag("claude")],
+        Annotated[ShellTask, Tag("shell")],
+        Annotated[PerplexityTask, Tag("perplexity")],
+        Annotated[OpenAITask, Tag("openai")],
+    ],
+    Discriminator("type"),
+]
+
+
+# ---------------------------------------------------------------------------
+# Root DAG file model
+# ---------------------------------------------------------------------------
+
+class DagFile(BaseModel):
+    """Root model representing a complete DAG YAML file."""
+    dag: DagHeader
+    tasks: dict[str, Task]
