@@ -1,0 +1,356 @@
+dag:
+  version: 2
+  name: Equity Research Report Bot
+  inputs:
+    ticker: "${ticker}"
+    workdir: "${workdir}"
+  root_dir: ..
+  template_dir: ../templates
+
+tasks:
+  # --- Data gathering tasks ---
+  profile:
+    description: Get company profile data based on symbol
+    type: python
+    config:
+      script: skills/research_profile.py
+      args:
+        ticker: "${ticker}"
+        workdir: "${workdir}"
+    outputs:
+      profile:    {path: "artifacts/profile.json", format: json}
+      peers_list: {path: "artifacts/peers_list.json", format: json}
+
+  technical:
+    description: Generate stock chart and technical indicators
+    type: python
+    depends_on: [profile]
+    config:
+      script: skills/research_technical.py
+      args:
+        ticker: "${ticker}"
+        workdir: "${workdir}"
+    outputs:
+      chart:              {path: "artifacts/chart.png", format: png}
+      technical_analysis: {path: "artifacts/technical_analysis.json", format: json}
+
+  fundamental:
+    description: Fetch financial statements, ratios, and analyst data
+    type: python
+    depends_on: [profile]
+    config:
+      script: skills/research_fundamental.py
+      args:
+        ticker: "${ticker}"
+        workdir: "${workdir}"
+        peers_file: "artifacts/peers_list.json"
+    outputs:
+      income_statement:        {path: "artifacts/income_statement.csv", format: csv}
+      balance_sheet:           {path: "artifacts/balance_sheet.csv", format: csv}
+      cash_flow:               {path: "artifacts/cash_flow.csv", format: csv}
+      key_ratios:              {path: "artifacts/key_ratios.csv", format: csv}
+      analyst_recommendations: {path: "artifacts/analyst_recommendations.json", format: json}
+
+  perplexity:
+    description: Research news, business profile, and executives via Perplexity AI
+    type: python
+    depends_on: [profile]
+    config:
+      script: skills/research_perplexity.py
+      args:
+        ticker: "${ticker}"
+        workdir: "${workdir}"
+    outputs:
+      news_stories:       {path: "artifacts/news_stories.md", format: md}
+      business_profile:   {path: "artifacts/business_profile.md", format: md}
+      executive_profiles: {path: "artifacts/executive_profiles.md", format: md}
+
+  sec_edgar:
+    description: Fetch SEC filings (10-K, 10-Q, 8-K) via edgartools
+    type: python
+    depends_on: [profile]
+    config:
+      script: skills/research_sec_edgar.py
+      args:
+        ticker: "${ticker}"
+        workdir: "${workdir}"
+    outputs:
+      filings_index: {path: "artifacts/filings_index.json", format: json}
+      10k_items:     {path: "artifacts/latest_10k/", format: md}
+      10q_items:     {path: "artifacts/latest_10q/", format: md}
+      financials:    {path: "artifacts/financials/", format: csv}
+      8k_summary:    {path: "artifacts/recent_8k/8k_summary.json", format: json}
+
+  wikipedia:
+    description: Fetch Wikipedia company summary
+    type: python
+    depends_on: [profile]
+    config:
+      script: skills/research_wikipedia.py
+      args:
+        ticker: "${ticker}"
+        workdir: "${workdir}"
+    outputs:
+      wikipedia_summary: {path: "artifacts/wikipedia_summary.txt", format: txt}
+
+  analysis:
+    description: Generate business model, competitive, risk, and investment analysis via Perplexity
+    type: python
+    depends_on: [profile]
+    config:
+      script: skills/research_analysis.py
+      args:
+        ticker: "${ticker}"
+        workdir: "${workdir}"
+    outputs:
+      business_model: {path: "artifacts/business_model_analysis.md", format: md}
+      competitive:    {path: "artifacts/competitive_analysis.md", format: md}
+      risk:           {path: "artifacts/risk_analysis.md", format: md}
+      investment:     {path: "artifacts/investment_thesis.md", format: md}
+
+  # --- Body writing tasks (Claude subagents with critic-optimizer) ---
+  write_fundamental_analysis:
+    description: Write the Fundamental Analysis report section
+    type: claude
+    depends_on: [fundamental]
+    config:
+      prompt: |
+        Write a Fundamental Analysis section for ${ticker}.
+        Use tables for financials. Highlight YoY changes. Compare to peer medians.
+        Use the provided research artifacts as your source material.
+        Output as markdown.
+      system: "You are a senior equity research analyst writing a professional report."
+      tools: [read, write, grep, glob]
+      reads_from: [fundamental, technical]
+    outputs:
+      section: {path: "artifacts/01_fundamental_analysis.md", format: md}
+
+  write_company_profile:
+    description: Write the Company Profile report section
+    type: claude
+    depends_on: [perplexity, wikipedia, sec_edgar]
+    config:
+      prompt: |
+        Write a Company Profile section for ${ticker}.
+        Focus on origin story, history, milestones, description of current operations.
+        Use the provided research artifacts as your source material.
+        Output as markdown.
+      system: "You are a senior equity research analyst writing a professional report."
+      tools: [read, write, grep, glob]
+      reads_from: [perplexity, wikipedia, sec_edgar]
+    outputs:
+      section: {path: "artifacts/02_company_profile.md", format: md}
+
+  write_business_model:
+    description: Write the Business Model report section
+    type: claude
+    depends_on: [perplexity, wikipedia, sec_edgar]
+    config:
+      prompt: |
+        Write a Business Model section for ${ticker}.
+        Focus on what makes money and why. Revenue segments. Competitive moat.
+        Use the provided research artifacts as your source material.
+        Output as markdown.
+      system: "You are a senior equity research analyst writing a professional report."
+      tools: [read, write, grep, glob]
+      reads_from: [perplexity, wikipedia, sec_edgar]
+    outputs:
+      section: {path: "artifacts/03_business_model.md", format: md}
+
+  write_competitive_landscape:
+    description: Write the Competitive Landscape report section
+    type: claude
+    depends_on: [perplexity, wikipedia, sec_edgar]
+    config:
+      prompt: |
+        Write a Competitive Landscape section for ${ticker}.
+        Peer comparison table. Market share. Differentiation.
+        Use the provided research artifacts as your source material.
+        Output as markdown.
+      system: "You are a senior equity research analyst writing a professional report."
+      tools: [read, write, grep, glob]
+      reads_from: [perplexity, wikipedia, sec_edgar]
+    outputs:
+      section: {path: "artifacts/04_competitive_landscape.md", format: md}
+
+  write_supply_chain:
+    description: Write the Supply Chain Analysis report section
+    type: claude
+    depends_on: [perplexity, wikipedia, sec_edgar]
+    config:
+      prompt: |
+        Write a Supply Chain Analysis section for ${ticker}.
+        Key suppliers, customers, distribution channels. Supply chain risks and dependencies.
+        Use the provided research artifacts as your source material.
+        Output as markdown.
+      system: "You are a senior equity research analyst writing a professional report."
+      tools: [read, write, grep, glob]
+      reads_from: [perplexity, wikipedia, sec_edgar]
+    outputs:
+      section: {path: "artifacts/05_supply_chain.md", format: md}
+
+  write_leverage:
+    description: Write the Financial and Operating Leverage report section
+    type: claude
+    depends_on: [perplexity, wikipedia, sec_edgar]
+    config:
+      prompt: |
+        Write a Financial and Operating Leverage section for ${ticker}.
+        Sensitivity to changes in interest rates, economic operating environment, input/output prices.
+        Use the provided research artifacts as your source material.
+        Output as markdown.
+      system: "You are a senior equity research analyst writing a professional report."
+      tools: [read, write, grep, glob]
+      reads_from: [perplexity, wikipedia, sec_edgar]
+    outputs:
+      section: {path: "artifacts/05_leverage.md", format: md}
+
+  write_valuation:
+    description: Write the Valuation report section
+    type: claude
+    depends_on: [perplexity, wikipedia, sec_edgar]
+    config:
+      prompt: |
+        Write a Valuation section for ${ticker}.
+        Appropriate valuation methodologies, metrics under them, peer comparisons.
+        Use the provided research artifacts as your source material.
+        Output as markdown.
+      system: "You are a senior equity research analyst writing a professional report."
+      tools: [read, write, grep, glob]
+      reads_from: [perplexity, wikipedia, sec_edgar]
+    outputs:
+      section: {path: "artifacts/06_valuation.md", format: md}
+
+  write_news:
+    description: Write the Recent Developments report section
+    type: claude
+    depends_on: [perplexity, wikipedia, sec_edgar]
+    config:
+      prompt: |
+        Write a Recent Developments section for ${ticker}.
+        Recent news and market developments, exec changes, rating changes.
+        Use the provided research artifacts as your source material.
+        Output as markdown.
+      system: "You are a senior equity research analyst writing a professional report."
+      tools: [read, write, grep, glob]
+      reads_from: [perplexity, wikipedia, sec_edgar]
+    outputs:
+      section: {path: "artifacts/07_news.md", format: md}
+
+  write_risks:
+    description: Write the Risk Analysis report section
+    type: claude
+    depends_on: [perplexity, wikipedia, sec_edgar]
+    config:
+      prompt: |
+        Write a Risk Analysis section for ${ticker}.
+        Specific risks. Categorize: operational, financial, regulatory, market.
+        Use the provided research artifacts as your source material.
+        Output as markdown.
+      system: "You are a senior equity research analyst writing a professional report."
+      tools: [read, write, grep, glob]
+      reads_from: [perplexity, wikipedia, sec_edgar]
+    outputs:
+      section: {path: "artifacts/08_risks.md", format: md}
+
+  write_thesis:
+    description: Write the Investment Thesis and SWOT report section
+    type: claude
+    depends_on: [perplexity, wikipedia, sec_edgar]
+    config:
+      prompt: |
+        Write an Investment Thesis & SWOT section for ${ticker}.
+        Bull case, bear case, base case with price implications. SWOT table.
+        Use the provided research artifacts as your source material.
+        Output as markdown.
+      system: "You are a senior equity research analyst writing a professional report."
+      tools: [read, write, grep, glob]
+      reads_from: [perplexity, wikipedia, sec_edgar]
+    outputs:
+      section: {path: "artifacts/09_thesis.md", format: md}
+
+  # --- Bookend writing tasks (depend on body sections) ---
+  write_executive_summary:
+    description: Write the Executive Summary report section
+    type: claude
+    depends_on:
+      - write_fundamental_analysis
+      - write_company_profile
+      - write_competitive_landscape
+      - write_risks
+      - write_thesis
+    config:
+      prompt: |
+        Write an Executive Summary section for ${ticker}.
+        Max 300 words. Investment stance in first sentence. Key metrics. Why now.
+        Use the provided research artifacts as your source material.
+        Output as markdown.
+      system: "You are a senior equity research analyst writing a professional report."
+      tools: [read, write, grep, glob]
+      reads_from:
+        - profile
+        - technical
+        - fundamental
+        - perplexity
+        - analysis
+        - write_fundamental_analysis
+        - write_company_profile
+        - write_competitive_landscape
+        - write_risks
+        - write_thesis
+    outputs:
+      section: {path: "artifacts/00_executive_summary.md", format: md}
+
+  write_conclusion:
+    description: Write the Conclusion and Recommendation report section
+    type: claude
+    depends_on:
+      - write_fundamental_analysis
+      - write_company_profile
+      - write_competitive_landscape
+      - write_risks
+      - write_thesis
+    config:
+      prompt: |
+        Write a Conclusion & Recommendation section for ${ticker}.
+        Synthesize across sections. Clear recommendation. Key watchpoints. Catalysts.
+        Use the provided research artifacts as your source material.
+        Output as markdown.
+      system: "You are a senior equity research analyst writing a professional report."
+      tools: [read, write, grep, glob]
+      reads_from:
+        - write_fundamental_analysis
+        - write_company_profile
+        - write_competitive_landscape
+        - write_risks
+        - write_thesis
+    outputs:
+      section: {path: "artifacts/11_conclusion.md", format: md}
+
+  # --- Assembly + Polish ---
+  assembly:
+    description: Assemble final report from all sections
+    type: python
+    depends_on: [write_executive_summary, write_conclusion]
+    config:
+      script: skills/assemble.py
+      args:
+        template: "templates/equity_research_report.md.j2"
+        workdir: "${workdir}"
+    outputs:
+      report: {path: "research_report.md", format: md}
+
+  polish:
+    description: Final polish pass on assembled report
+    type: claude
+    depends_on: [assembly]
+    config:
+      prompt: |
+        Review and polish this equity research report for clarity, consistency,
+        and professional tone. Fix any formatting issues, ensure smooth transitions
+        between sections, and verify factual consistency throughout.
+      system: "You are a senior equity research analyst and editor."
+      tools: [read, write, grep, glob]
+      reads_from: [assembly]
+    outputs:
+      final_report: {path: "final_report.md", format: md}

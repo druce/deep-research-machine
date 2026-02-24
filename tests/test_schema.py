@@ -352,3 +352,23 @@ def test_load_dag_substitutes_in_prompt():
     variables = {"ticker": "MSFT"}
     dag = load_dag(raw, variables)
     assert dag.tasks["write"].config.prompt == "Analyze MSFT stock"
+
+
+# ---------------------------------------------------------------------------
+# Integration test: validate actual project DAG file
+# ---------------------------------------------------------------------------
+
+def test_sra_yaml_validates():
+    """The actual project DAG file passes v2 validation."""
+    from pathlib import Path
+    import yaml
+
+    yaml_path = Path(__file__).parent.parent / "dags" / "sra.yaml"
+    with yaml_path.open() as f:
+        raw = yaml.safe_load(f)
+    dag = validate_dag(raw)
+    assert dag.dag.version == 2
+    assert len(dag.tasks) > 0
+    # Verify all task types are valid
+    for task_id, task in dag.tasks.items():
+        assert task.type in ("python", "claude", "shell", "perplexity", "openai"), f"Bad type in {task_id}"
