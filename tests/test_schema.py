@@ -372,3 +372,31 @@ def test_sra_yaml_validates():
     # Verify all task types are valid
     for task_id, task in dag.tasks.items():
         assert task.type in ("python", "claude", "shell", "perplexity", "openai"), f"Bad type in {task_id}"
+
+
+# ---------------------------------------------------------------------------
+# Integration test: db.py init with v2 YAML
+# ---------------------------------------------------------------------------
+
+import subprocess
+
+
+def test_db_init_with_v2_yaml(tmp_path):
+    """db.py init successfully loads the v2 YAML and populates the database."""
+    workdir = tmp_path / "test_run"
+    result = subprocess.run(
+        [
+            "uv", "run", "python", "skills/db.py", "init",
+            "--workdir", str(workdir),
+            "--dag", "dags/sra.yaml",
+            "--ticker", "TEST",
+        ],
+        capture_output=True,
+        text=True,
+        cwd="/Users/drucev/projects/sra2",
+    )
+    assert result.returncode == 0, f"stderr: {result.stderr}\nstdout: {result.stdout}"
+    import json
+    output = json.loads(result.stdout)
+    assert output["status"] == "ok"
+    assert output["tasks"] > 0
