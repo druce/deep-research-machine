@@ -230,3 +230,83 @@ def test_dagfile_version_1_rejected():
             dag={"version": 1, "name": "Old"},
             tasks={},
         )
+
+
+# ---------------------------------------------------------------------------
+# Cross-reference validation tests (validate_dag)
+# ---------------------------------------------------------------------------
+
+from schema import validate_dag
+
+
+def test_validate_dag_valid():
+    raw = {
+        "dag": {"version": 2, "name": "Test"},
+        "tasks": {
+            "a": {"description": "A", "type": "shell", "config": {"command": "echo a"}},
+            "b": {"description": "B", "type": "shell", "depends_on": ["a"], "config": {"command": "echo b"}},
+        },
+    }
+    dag = validate_dag(raw)
+    assert len(dag.tasks) == 2
+
+
+def test_validate_dag_bad_dependency_ref():
+    raw = {
+        "dag": {"version": 2, "name": "Test"},
+        "tasks": {
+            "a": {"description": "A", "type": "shell", "depends_on": ["nonexistent"], "config": {"command": "echo a"}},
+        },
+    }
+    with pytest.raises(ValueError, match="nonexistent"):
+        validate_dag(raw)
+
+
+def test_validate_dag_bad_reads_from_ref():
+    raw = {
+        "dag": {"version": 2, "name": "Test"},
+        "tasks": {
+            "a": {"description": "A", "type": "python", "config": {"script": "run.py"}},
+            "b": {
+                "description": "B",
+                "type": "claude",
+                "config": {"prompt": "do it", "reads_from": ["nonexistent"]},
+            },
+        },
+    }
+    with pytest.raises(ValueError, match="nonexistent"):
+        validate_dag(raw)
+
+
+def test_validate_dag_cycle():
+    raw = {
+        "dag": {"version": 2, "name": "Test"},
+        "tasks": {
+            "a": {"description": "A", "type": "shell", "depends_on": ["b"], "config": {"command": "echo a"}},
+            "b": {"description": "B", "type": "shell", "depends_on": ["a"], "config": {"command": "echo b"}},
+        },
+    }
+    with pytest.raises(ValueError, match="[Cc]ycle"):
+        validate_dag(raw)
+
+
+def test_validate_dag_duplicate_output_paths():
+    raw = {
+        "dag": {"version": 2, "name": "Test"},
+        "tasks": {
+            "a": {
+                "description": "A",
+                "type": "shell",
+                "config": {"command": "echo a"},
+                "outputs": {"out": {"path": "same.txt", "format": "txt"}},
+            },
+            "b": {
+                "description": "B",
+                "type": "shell",
+                "config": {"command": "echo b"},
+                "outputs": {"out": {"path": "same.txt", "format": "txt"}},
+            },
+        },
+    }
+    with pytest.raises(ValueError, match="same.txt"):
+        validate_dag(raw)

@@ -118,3 +118,80 @@ class DagFile(BaseModel):
     """Root model representing a complete DAG YAML file."""
     dag: DagHeader
     tasks: dict[str, Task]
+
+
+# ---------------------------------------------------------------------------
+# Cross-reference validation
+# ---------------------------------------------------------------------------
+
+def validate_dag(raw: dict) -> DagFile:
+    """Parse raw YAML dict into a validated DagFile.
+
+    Performs:
+    1. Pydantic structural validation (types, required fields)
+    2. Dependency reference validation (all depends_on targets exist)
+    3. reads_from reference validation (all reads_from targets exist)
+    4. Cycle detection (topological sort)
+    5. Output path uniqueness
+    """
+    dag = DagFile(**raw)
+    task_ids = set(dag.tasks.keys())
+
+    # Validate dependency references
+    for task_id, task in dag.tasks.items():
+        for dep in task.depends_on:
+            if dep not in task_ids:
+                raise ValueError(
+                    f"Task '{task_id}' depends on '{dep}' which does not exist. "
+                    f"Available tasks: {sorted(task_ids)}"
+                )
+
+    # Validate reads_from references
+    for task_id, task in dag.tasks.items():
+        reads_from = getattr(task.config, "reads_from", [])
+        for ref in reads_from:
+            if ref not in task_ids:
+                raise ValueError(
+                    f"Task '{task_id}' reads_from '{ref}' which does not exist. "
+                    f"Available tasks: {sorted(task_ids)}"
+                )
+
+    # Cycle detection via topological sort (Kahn's algorithm)
+    in_degree = {tid: 0 for tid in task_ids}
+    for task_id, task in dag.tasks.items():
+        for dep in task.depends_on:
+            in_degree[task_id] += 1
+
+    queue = [tid for tid, deg in in_degree.items() if deg == 0]
+    visited = 0
+    adj: dict[str, list[str]] = {tid: [] for tid in task_ids}
+    for task_id, task in dag.tasks.items():
+        for dep in task.depends_on:
+            adj[dep].append(task_id)
+
+    while queue:
+        node = queue.pop(0)
+        visited += 1
+        for neighbor in adj[node]:
+            in_degree[neighbor] -= 1
+            if in_degree[neighbor] == 0:
+                queue.append(neighbor)
+
+    if visited != len(task_ids):
+        raise ValueError(
+            "Cycle detected in task dependencies. "
+            "Check depends_on fields for circular references."
+        )
+
+    # Output path uniqueness
+    seen_paths: dict[str, str] = {}
+    for task_id, task in dag.tasks.items():
+        for out_name, out_def in task.outputs.items():
+            if out_def.path in seen_paths:
+                raise ValueError(
+                    f"Duplicate output path '{out_def.path}' in tasks "
+                    f"'{seen_paths[out_def.path]}' and '{task_id}'"
+                )
+            seen_paths[out_def.path] = task_id
+
+    return dag
