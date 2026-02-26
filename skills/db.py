@@ -14,25 +14,30 @@ Commands:
     task-ready      JSON array of dispatchable tasks
     task-get        Full task config as JSON
     task-update     Update task state
+    task-context    Resolve dependency artifacts for a task
     artifact-add    Register an artifact
     artifact-list   List artifacts as JSON
     status          Overview: research status, all tasks, artifact counts
     research-update Update research.status field
+    var-set         Set a runtime DAG variable
+    var-get         Get one or all runtime DAG variables
 """
 
 import argparse
 import json
-import os
-import re
 import sqlite3
 import sys
 from datetime import datetime
 from pathlib import Path
+from typing import Any, Union
 
 import yaml
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from utils import setup_logging
+_SKILLS_DIR = Path(__file__).resolve().parent
+if str(_SKILLS_DIR) not in sys.path:
+    sys.path.insert(0, str(_SKILLS_DIR))
+
+from utils import setup_logging  # noqa: E402
 
 logger = setup_logging(__name__)
 
@@ -79,9 +84,17 @@ CREATE TABLE IF NOT EXISTS artifacts (
     name          TEXT NOT NULL,
     path          TEXT NOT NULL,
     format        TEXT NOT NULL,
+    description   TEXT,
     source        TEXT,
     summary       TEXT,
     size_bytes    INTEGER,
+    created_at    TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS dag_vars (
+    name          TEXT PRIMARY KEY,
+    value         TEXT NOT NULL,
+    source_task   TEXT REFERENCES tasks(id),
     created_at    TEXT DEFAULT (datetime('now'))
 );
 """
@@ -91,7 +104,7 @@ CREATE TABLE IF NOT EXISTS artifacts (
 # Helpers
 # ============================================================================
 
-def get_db(workdir: str) -> sqlite3.Connection:
+def get_db(workdir: Union[str, Path]) -> sqlite3.Connection:
     """Open the SQLite database in the given workdir."""
     db_path = Path(workdir) / 'research.db'
     if not db_path.exists():
@@ -99,6 +112,7 @@ def get_db(workdir: str) -> sqlite3.Connection:
     conn = sqlite3.connect(str(db_path))
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=5000")
     conn.execute("PRAGMA foreign_keys=ON")
     return conn
 
@@ -109,7 +123,7 @@ def error_exit(message: str) -> None:
     sys.exit(1)
 
 
-def substitute_vars(obj, variables: dict):
+def substitute_vars(obj: Any, variables: dict[str, str]) -> Any:
     """Recursively substitute ${var} placeholders in strings."""
     if isinstance(obj, str):
         for key, value in variables.items():
@@ -135,6 +149,7 @@ def cmd_init(args: argparse.Namespace) -> None:
     conn = sqlite3.connect(str(db_path))
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=5000")
     conn.execute("PRAGMA foreign_keys=ON")
     conn.executescript(SCHEMA)
 
@@ -174,6 +189,8 @@ def cmd_init(args: argparse.Namespace) -> None:
     for task_id, task in dag.tasks.items():
         params = task.config.model_dump()
         params['outputs'] = {k: v.model_dump() for k, v in task.outputs.items()}
+        if task.sets_vars:
+            params['sets_vars'] = {k: v.model_dump() for k, v in task.sets_vars.items()}
 
         conn.execute(
             """INSERT INTO tasks (id, skill, description, params, concurrency)
@@ -212,7 +229,7 @@ def cmd_task_ready(args: argparse.Namespace) -> None:
             SELECT 1 FROM task_deps d
             JOIN tasks dep ON d.depends_on = dep.id
             WHERE d.task_id = t.id
-            AND dep.status NOT IN ('complete', 'skipped')
+            AND dep.status NOT IN ('complete', 'skipped', 'failed')
         )
     """).fetchall()
 
@@ -327,13 +344,23 @@ def cmd_artifact_add(args: argparse.Namespace) -> None:
     """Register an artifact."""
     conn = get_db(args.workdir)
 
-    # Verify task exists
+    # Verify task exists and get params for description fallback
     row = conn.execute(
-        "SELECT id FROM tasks WHERE id = ?", (args.task,)
+        "SELECT id, params FROM tasks WHERE id = ?", (args.task,)
     ).fetchone()
     if not row:
         conn.close()
         error_exit(f"Task not found: {args.task}")
+
+    # Fall back to YAML output description if none provided
+    description = args.description
+    if description is None:
+        try:
+            params = json.loads(row["params"])
+            output_def = params.get("outputs", {}).get(args.name, {})
+            description = output_def.get("description") or None
+        except (json.JSONDecodeError, AttributeError):
+            pass
 
     # Compute size_bytes if file exists
     size_bytes = None
@@ -351,17 +378,17 @@ def cmd_artifact_add(args: argparse.Namespace) -> None:
 
     if existing:
         conn.execute(
-            """UPDATE artifacts SET path = ?, format = ?, source = ?,
+            """UPDATE artifacts SET path = ?, format = ?, description = ?, source = ?,
                summary = ?, size_bytes = ?, created_at = datetime('now')
                WHERE id = ?""",
-            (args.path, args.format, args.source, args.summary, size_bytes, existing["id"])
+            (args.path, args.format, description, args.source, args.summary, size_bytes, existing["id"])
         )
         artifact_id = existing["id"]
     else:
         cursor = conn.execute(
-            """INSERT INTO artifacts (task_id, name, path, format, source, summary, size_bytes)
-               VALUES (?, ?, ?, ?, ?, ?, ?)""",
-            (args.task, args.name, args.path, args.format, args.source, args.summary, size_bytes)
+            """INSERT INTO artifacts (task_id, name, path, format, description, source, summary, size_bytes)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (args.task, args.name, args.path, args.format, description, args.source, args.summary, size_bytes)
         )
         artifact_id = cursor.lastrowid
 
@@ -382,13 +409,13 @@ def cmd_artifact_list(args: argparse.Namespace) -> None:
 
     if args.task:
         rows = conn.execute(
-            """SELECT id, task_id, name, path, format, source, summary, size_bytes
+            """SELECT id, task_id, name, path, format, description, source, summary, size_bytes
                FROM artifacts WHERE task_id = ? ORDER BY id""",
             (args.task,)
         ).fetchall()
     else:
         rows = conn.execute(
-            """SELECT id, task_id, name, path, format, source, summary, size_bytes
+            """SELECT id, task_id, name, path, format, description, source, summary, size_bytes
                FROM artifacts ORDER BY id"""
         ).fetchall()
 
@@ -400,6 +427,7 @@ def cmd_artifact_list(args: argparse.Namespace) -> None:
             "name": row["name"],
             "path": row["path"],
             "format": row["format"],
+            "description": row["description"],
             "source": row["source"],
             "summary": row["summary"],
             "size_bytes": row["size_bytes"],
@@ -486,6 +514,108 @@ def cmd_research_update(args: argparse.Namespace) -> None:
     }))
 
 
+
+def cmd_var_set(args: argparse.Namespace) -> None:
+    """Set a runtime DAG variable."""
+    conn = get_db(args.workdir)
+
+    conn.execute(
+        """INSERT INTO dag_vars (name, value, source_task)
+           VALUES (?, ?, ?)
+           ON CONFLICT(name) DO UPDATE SET
+               value = excluded.value,
+               source_task = excluded.source_task,
+               created_at = datetime('now')""",
+        (args.name, args.value, args.source_task)
+    )
+    conn.commit()
+    conn.close()
+
+    print(json.dumps({
+        "status": "ok",
+        "name": args.name,
+        "value": args.value,
+    }))
+
+
+def cmd_var_get(args: argparse.Namespace) -> None:
+    """Get one or all runtime DAG variables."""
+    conn = get_db(args.workdir)
+
+    if args.name:
+        row = conn.execute(
+            "SELECT name, value, source_task FROM dag_vars WHERE name = ?",
+            (args.name,)
+        ).fetchone()
+        conn.close()
+
+        if not row:
+            error_exit(f"Variable not found: {args.name}")
+
+        print(json.dumps({
+            "name": row["name"],
+            "value": row["value"],
+            "source_task": row["source_task"],
+        }))
+    else:
+        rows = conn.execute(
+            "SELECT name, value, source_task FROM dag_vars ORDER BY name"
+        ).fetchall()
+        conn.close()
+
+        result = {}
+        for row in rows:
+            result[row["name"]] = row["value"]
+
+        print(json.dumps(result))
+
+
+def cmd_task_context(args: argparse.Namespace) -> None:
+    """Resolve dependency artifacts for a task."""
+    conn = get_db(args.workdir)
+
+    # Verify task exists
+    row = conn.execute(
+        "SELECT id FROM tasks WHERE id = ?", (args.task_id,)
+    ).fetchone()
+    if not row:
+        conn.close()
+        error_exit(f"Task not found: {args.task_id}")
+
+    # Get dependencies
+    deps = conn.execute(
+        "SELECT depends_on FROM task_deps WHERE task_id = ?", (args.task_id,)
+    ).fetchall()
+    dep_ids = [d["depends_on"] for d in deps]
+
+    # Get artifacts from dependency tasks
+    artifacts = []
+    if dep_ids:
+        placeholders = ",".join("?" * len(dep_ids))
+        rows = conn.execute(
+            f"""SELECT task_id, name, path, format, description, summary
+                FROM artifacts WHERE task_id IN ({placeholders})
+                ORDER BY task_id, name""",
+            dep_ids
+        ).fetchall()
+        for r in rows:
+            artifacts.append({
+                "from_task": r["task_id"],
+                "name": r["name"],
+                "path": r["path"],
+                "format": r["format"],
+                "description": r["description"],
+                "summary": r["summary"],
+            })
+
+    conn.close()
+    print(json.dumps({
+        "task_id": args.task_id,
+        "depends_on": dep_ids,
+        "artifacts": artifacts,
+    }, indent=2))
+
+
 def cmd_validate(args: argparse.Namespace) -> None:
     """Validate a DAG YAML file without touching the database."""
     dag_path = Path(args.dag)
@@ -540,25 +670,31 @@ def main() -> int:
     # task-get
     p_get = subparsers.add_parser('task-get', help='Get task details')
     p_get.add_argument('--workdir', required=True)
-    p_get.add_argument('task_id', help='Task ID')
+    p_get.add_argument('--task-id', required=True, dest='task_id', help='Task ID')
 
     # task-update
     p_update = subparsers.add_parser('task-update', help='Update task status')
     p_update.add_argument('--workdir', required=True)
-    p_update.add_argument('task_id', help='Task ID')
+    p_update.add_argument('--task-id', required=True, dest='task_id', help='Task ID')
     p_update.add_argument('--status', choices=['pending', 'running', 'complete', 'failed', 'skipped'])
     p_update.add_argument('--summary', help='Brief result summary')
     p_update.add_argument('--error', help='Error message')
 
+    # task-context
+    p_ctx = subparsers.add_parser('task-context', help='Resolve dependency artifacts for a task')
+    p_ctx.add_argument('--workdir', required=True)
+    p_ctx.add_argument('--task-id', required=True, dest='task_id', help='Task ID')
+
     # artifact-add
     p_add = subparsers.add_parser('artifact-add', help='Register an artifact')
     p_add.add_argument('--workdir', required=True)
-    p_add.add_argument('--task', required=True, help='Task ID')
+    p_add.add_argument('--task-id', required=True, dest='task', help='Task ID')
     p_add.add_argument('--name', required=True, help='Artifact name')
     p_add.add_argument('--path', required=True, help='Path relative to workdir')
     p_add.add_argument('--format', required=True, help='File format (json|csv|md|png|txt)')
+    p_add.add_argument('--description', default=None, help='Static description of artifact content')
     p_add.add_argument('--source', default=None, help='Data source')
-    p_add.add_argument('--summary', default=None, help='Brief description')
+    p_add.add_argument('--summary', default=None, help='Brief runtime result summary')
 
     # artifact-list
     p_list = subparsers.add_parser('artifact-list', help='List artifacts')
@@ -574,6 +710,19 @@ def main() -> int:
     p_rupdate.add_argument('--workdir', required=True)
     p_rupdate.add_argument('--status', required=True,
                            choices=['not started', 'running', 'complete', 'failed'])
+
+    # var-set
+    p_vset = subparsers.add_parser('var-set', help='Set a runtime DAG variable')
+    p_vset.add_argument('--workdir', required=True)
+    p_vset.add_argument('--name', required=True, help='Variable name')
+    p_vset.add_argument('--value', required=True, help='Variable value')
+    p_vset.add_argument('--source-task', default=None, dest='source_task',
+                        help='Task that produced this variable')
+
+    # var-get
+    p_vget = subparsers.add_parser('var-get', help='Get runtime DAG variables')
+    p_vget.add_argument('--workdir', required=True)
+    p_vget.add_argument('--name', default=None, help='Variable name (omit for all)')
 
     # validate
     p_validate = subparsers.add_parser('validate', help='Validate a DAG YAML file')
@@ -592,10 +741,13 @@ def main() -> int:
         'task-ready': cmd_task_ready,
         'task-get': cmd_task_get,
         'task-update': cmd_task_update,
+        'task-context': cmd_task_context,
         'artifact-add': cmd_artifact_add,
         'artifact-list': cmd_artifact_list,
         'status': cmd_status,
         'research-update': cmd_research_update,
+        'var-set': cmd_var_set,
+        'var-get': cmd_var_get,
         'validate': cmd_validate,
     }
 

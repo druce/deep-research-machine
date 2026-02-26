@@ -1,8 +1,8 @@
 """Tests for DAG schema v2 Pydantic models."""
 
 import pytest
-from schema import OutputDef, DagHeader
-from schema import PythonConfig, ClaudeConfig, ShellConfig, PerplexityConfig, OpenAIConfig
+from schema import OutputDef, SetsVarDef, DagHeader
+from schema import PythonConfig, ClaudeConfig, ShellConfig
 from schema import DagFile
 
 
@@ -10,6 +10,12 @@ def test_output_def_valid():
     out = OutputDef(path="artifacts/profile.json", format="json")
     assert out.path == "artifacts/profile.json"
     assert out.format == "json"
+    assert out.description == ""
+
+
+def test_output_def_with_description():
+    out = OutputDef(path="artifacts/profile.json", format="json", description="Company identity and valuation snapshot")
+    assert out.description == "Company identity and valuation snapshot"
 
 
 def test_output_def_missing_path():
@@ -20,6 +26,22 @@ def test_output_def_missing_path():
 def test_output_def_missing_format():
     with pytest.raises(Exception):
         OutputDef(path="artifacts/profile.json")
+
+
+def test_sets_var_def_valid():
+    sv = SetsVarDef(artifact="artifacts/profile.json", key="company_name")
+    assert sv.artifact == "artifacts/profile.json"
+    assert sv.key == "company_name"
+
+
+def test_sets_var_def_missing_artifact():
+    with pytest.raises(Exception):
+        SetsVarDef(key="company_name")
+
+
+def test_sets_var_def_missing_key():
+    with pytest.raises(Exception):
+        SetsVarDef(artifact="artifacts/profile.json")
 
 
 def test_dag_header_valid():
@@ -53,8 +75,8 @@ def test_dag_header_defaults():
 
 
 def test_python_config_valid():
-    cfg = PythonConfig(script="skills/research_profile.py", args={"ticker": "AAPL"})
-    assert cfg.script == "skills/research_profile.py"
+    cfg = PythonConfig(script="skills/fetch_profile/fetch_profile.py", args={"ticker": "AAPL"})
+    assert cfg.script == "skills/fetch_profile/fetch_profile.py"
     assert cfg.args == {"ticker": "AAPL"}
 
 
@@ -73,27 +95,96 @@ def test_claude_config_valid():
         prompt="Write a report about ${ticker}",
         system="You are an analyst.",
         model="claude-sonnet-4-6",
-        max_turns=10,
         tools=["read", "write"],
-        reads_from=["profile", "technical"],
+        allowed_tools=["Bash(git:*)"],
+        disallowed_tools=["Write"],
+        permission_mode="bypassPermissions",
+        skip_permissions=True,
+        max_budget_usd=1.50,
+        output_format="json",
+        effort="high",
+        add_dirs=["../data"],
+        mcp_config=["mcp.json"],
     )
     assert cfg.prompt == "Write a report about ${ticker}"
     assert cfg.tools == ["read", "write"]
-    assert cfg.reads_from == ["profile", "technical"]
+    assert cfg.allowed_tools == ["Bash(git:*)"]
+    assert cfg.disallowed_tools == ["Write"]
+    assert cfg.permission_mode == "bypassPermissions"
+    assert cfg.skip_permissions is True
+    assert cfg.max_budget_usd == 1.50
+    assert cfg.output_format == "json"
+    assert cfg.effort == "high"
+    assert cfg.add_dirs == ["../data"]
+    assert cfg.mcp_config == ["mcp.json"]
+
+
+def test_claude_config_tools_all():
+    """tools: 'all' accepted as a string."""
+    cfg = ClaudeConfig(prompt="Do it", tools="all")
+    assert cfg.tools == "all"
+
+
+def test_claude_config_tools_empty():
+    """tools defaults to empty list."""
+    cfg = ClaudeConfig(prompt="Do it")
+    assert cfg.tools == []
 
 
 def test_claude_config_minimal():
-    cfg = ClaudeConfig(prompt="Do something")
+    cfg = ClaudeConfig(prompt="Do it")
     assert cfg.system is None
+    assert cfg.append_system is None
     assert cfg.model is None
-    assert cfg.max_turns is None
+    assert cfg.fallback_model is None
     assert cfg.tools == []
-    assert cfg.reads_from == []
+    assert cfg.allowed_tools == []
+    assert cfg.disallowed_tools == []
+    assert cfg.permission_mode is None
+    assert cfg.skip_permissions is False
+    assert cfg.max_budget_usd is None
+    assert cfg.output_format is None
+    assert cfg.json_schema is None
+    assert cfg.effort is None
+    assert cfg.add_dirs == []
+    assert cfg.mcp_config == []
+
+
+def test_claude_config_append_system():
+    cfg = ClaudeConfig(prompt="Do it", append_system="Extra context")
+    assert cfg.append_system == "Extra context"
+    assert cfg.system is None
+
+
+def test_claude_config_json_schema_dict():
+    schema = {"type": "object", "properties": {"name": {"type": "string"}}}
+    cfg = ClaudeConfig(prompt="Do it", json_schema=schema)
+    assert cfg.json_schema == schema
+
+
+def test_claude_config_json_schema_string():
+    cfg = ClaudeConfig(prompt="Do it", json_schema='{"type":"object"}')
+    assert cfg.json_schema == '{"type":"object"}'
+
+
+def test_claude_config_invalid_permission_mode():
+    with pytest.raises(Exception):
+        ClaudeConfig(prompt="Do it", permission_mode="invalid")
+
+
+def test_claude_config_invalid_output_format():
+    with pytest.raises(Exception):
+        ClaudeConfig(prompt="Do it", output_format="xml")
+
+
+def test_claude_config_invalid_effort():
+    with pytest.raises(Exception):
+        ClaudeConfig(prompt="Do it", effort="ultra")
 
 
 def test_claude_config_missing_prompt():
     with pytest.raises(Exception):
-        ClaudeConfig(model="claude-sonnet-4-6")
+        ClaudeConfig()
 
 
 def test_shell_config_valid():
@@ -106,22 +197,6 @@ def test_shell_config_missing_command():
         ShellConfig()
 
 
-def test_perplexity_config_valid():
-    cfg = PerplexityConfig(prompt="Research news about AAPL", model="sonar-pro")
-    assert cfg.model == "sonar-pro"
-
-
-def test_perplexity_config_defaults():
-    cfg = PerplexityConfig(prompt="Research news")
-    assert cfg.model is None
-    assert cfg.reads_from == []
-
-
-def test_openai_config_valid():
-    cfg = OpenAIConfig(prompt="Summarize this", model="gpt-4o")
-    assert cfg.model == "gpt-4o"
-
-
 def test_task_python():
     from pydantic import TypeAdapter
     from schema import Task
@@ -129,7 +204,7 @@ def test_task_python():
     task = adapter.validate_python({
         "description": "Get profile",
         "type": "python",
-        "config": {"script": "skills/research_profile.py", "args": {"ticker": "AAPL"}},
+        "config": {"script": "skills/fetch_profile/fetch_profile.py", "args": {"ticker": "AAPL"}},
         "outputs": {"profile": {"path": "artifacts/profile.json", "format": "json"}},
     })
     assert task.type == "python"
@@ -144,12 +219,30 @@ def test_task_claude():
         "description": "Write section",
         "type": "claude",
         "depends_on": ["profile"],
-        "config": {"prompt": "Write a report", "tools": ["read"]},
+        "config": {
+            "prompt": "Write a report",
+            "tools": ["read"],
+        },
         "outputs": {"section": {"path": "artifacts/section.md", "format": "md"}},
     })
     assert task.type == "claude"
     assert isinstance(task.config, ClaudeConfig)
     assert task.depends_on == ["profile"]
+
+
+def test_task_claude_tools_all():
+    from pydantic import TypeAdapter
+    from schema import Task
+    adapter = TypeAdapter(Task)
+    task = adapter.validate_python({
+        "description": "Write section",
+        "type": "claude",
+        "config": {
+            "prompt": "Write a report",
+            "tools": "all",
+        },
+    })
+    assert task.config.tools == "all"
 
 
 def test_task_shell():
@@ -190,6 +283,25 @@ def test_task_wrong_config_for_type():
         })
 
 
+def test_task_with_sets_vars():
+    from pydantic import TypeAdapter
+    from schema import Task, SetsVarDef
+    adapter = TypeAdapter(Task)
+    task = adapter.validate_python({
+        "description": "Get profile",
+        "type": "python",
+        "config": {"script": "skills/fetch_profile/fetch_profile.py", "args": {"ticker": "AAPL"}},
+        "outputs": {"profile": {"path": "artifacts/profile.json", "format": "json"}},
+        "sets_vars": {
+            "symbol": {"artifact": "artifacts/profile.json", "key": "symbol"},
+            "company_name": {"artifact": "artifacts/profile.json", "key": "company_name"},
+        },
+    })
+    assert len(task.sets_vars) == 2
+    assert isinstance(task.sets_vars["symbol"], SetsVarDef)
+    assert task.sets_vars["company_name"].key == "company_name"
+
+
 def test_task_defaults():
     from pydantic import TypeAdapter
     from schema import Task
@@ -201,6 +313,7 @@ def test_task_defaults():
     })
     assert task.depends_on == []
     assert task.outputs == {}
+    assert task.sets_vars == {}
 
 
 def test_dagfile_valid():
@@ -256,22 +369,6 @@ def test_validate_dag_bad_dependency_ref():
         "dag": {"version": 2, "name": "Test"},
         "tasks": {
             "a": {"description": "A", "type": "shell", "depends_on": ["nonexistent"], "config": {"command": "echo a"}},
-        },
-    }
-    with pytest.raises(ValueError, match="nonexistent"):
-        validate_dag(raw)
-
-
-def test_validate_dag_bad_reads_from_ref():
-    raw = {
-        "dag": {"version": 2, "name": "Test"},
-        "tasks": {
-            "a": {"description": "A", "type": "python", "config": {"script": "run.py"}},
-            "b": {
-                "description": "B",
-                "type": "claude",
-                "config": {"prompt": "do it", "reads_from": ["nonexistent"]},
-            },
         },
     }
     with pytest.raises(ValueError, match="nonexistent"):
@@ -345,7 +442,9 @@ def test_load_dag_substitutes_in_prompt():
             "write": {
                 "description": "Write",
                 "type": "claude",
-                "config": {"prompt": "Analyze ${ticker} stock"},
+                "config": {
+                    "prompt": "Analyze ${ticker} stock",
+                },
             },
         },
     }
@@ -371,7 +470,7 @@ def test_sra_yaml_validates():
     assert len(dag.tasks) > 0
     # Verify all task types are valid
     for task_id, task in dag.tasks.items():
-        assert task.type in ("python", "claude", "shell", "perplexity", "openai"), f"Bad type in {task_id}"
+        assert task.type in ("python", "claude", "shell"), f"Bad type in {task_id}"
 
 
 # ---------------------------------------------------------------------------

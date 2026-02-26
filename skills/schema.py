@@ -1,8 +1,7 @@
 """DAG Schema v2 — Pydantic models for YAML validation.
 
 Defines typed models for each task execution environment (python, claude,
-shell, perplexity, openai). YAML is loaded and validated through these
-models at db.py init time.
+shell). YAML is loaded and validated through these models at db.py init time.
 """
 
 from __future__ import annotations
@@ -16,6 +15,13 @@ class OutputDef(BaseModel):
     """A named artifact produced by a task."""
     path: str
     format: str
+    description: str = ""
+
+
+class SetsVarDef(BaseModel):
+    """Defines how to extract a runtime variable from a task's output artifact."""
+    artifact: str  # path relative to workdir, e.g. "artifacts/profile.json"
+    key: str       # top-level JSON key to extract
 
 
 class DagHeader(BaseModel):
@@ -34,32 +40,49 @@ class PythonConfig(BaseModel):
 
 
 class ClaudeConfig(BaseModel):
-    """Config for type: claude — invokes Claude Code CLI."""
+    """Config for type: claude — invokes Claude Code CLI.
+
+    Fields map to ``claude -p`` flags:
+      prompt             → the prompt text
+      system             → --system-prompt
+      append_system      → --append-system-prompt
+      model              → --model
+      fallback_model     → --fallback-model
+      tools              → --tools ("all", [], or explicit list)
+      allowed_tools      → --allowed-tools  (permission-scoped, e.g. "Bash(git:*)")
+      disallowed_tools   → --disallowed-tools
+      permission_mode    → --permission-mode
+      skip_permissions   → --dangerously-skip-permissions
+      max_budget_usd     → --max-budget-usd
+      output_format      → --output-format
+      json_schema        → --json-schema
+      effort             → --effort
+      add_dirs           → --add-dir
+      mcp_config         → --mcp-config
+    """
     prompt: str
     system: str | None = None
+    append_system: str | None = None
     model: str | None = None
-    max_turns: int | None = None
-    tools: list[str] = []
-    reads_from: list[str] = []
+    fallback_model: str | None = None
+    tools: list[str] | str = []
+    allowed_tools: list[str] = []
+    disallowed_tools: list[str] = []
+    permission_mode: Literal[
+        "default", "plan", "bypassPermissions", "acceptEdits", "dontAsk"
+    ] | None = None
+    skip_permissions: bool = False
+    max_budget_usd: float | None = None
+    output_format: Literal["text", "json", "stream-json"] | None = None
+    json_schema: dict | str | None = None
+    effort: Literal["low", "medium", "high"] | None = None
+    add_dirs: list[str] = []
+    mcp_config: list[str] = []
 
 
 class ShellConfig(BaseModel):
     """Config for type: shell — runs a shell command."""
     command: str
-
-
-class PerplexityConfig(BaseModel):
-    """Config for type: perplexity — calls Perplexity API."""
-    prompt: str
-    model: str | None = None
-    reads_from: list[str] = []
-
-
-class OpenAIConfig(BaseModel):
-    """Config for type: openai — calls OpenAI API."""
-    prompt: str
-    model: str | None = None
-    reads_from: list[str] = []
 
 
 # ---------------------------------------------------------------------------
@@ -71,6 +94,7 @@ class _TaskBase(BaseModel):
     description: str
     depends_on: list[str] = []
     outputs: dict[str, OutputDef] = {}
+    sets_vars: dict[str, SetsVarDef] = {}
 
 
 class PythonTask(_TaskBase):
@@ -88,23 +112,11 @@ class ShellTask(_TaskBase):
     config: ShellConfig
 
 
-class PerplexityTask(_TaskBase):
-    type: Literal["perplexity"]
-    config: PerplexityConfig
-
-
-class OpenAITask(_TaskBase):
-    type: Literal["openai"]
-    config: OpenAIConfig
-
-
 Task = Annotated[
     Union[
         Annotated[PythonTask, Tag("python")],
         Annotated[ClaudeTask, Tag("claude")],
         Annotated[ShellTask, Tag("shell")],
-        Annotated[PerplexityTask, Tag("perplexity")],
-        Annotated[OpenAITask, Tag("openai")],
     ],
     Discriminator("type"),
 ]
@@ -130,9 +142,8 @@ def validate_dag(raw: dict) -> DagFile:
     Performs:
     1. Pydantic structural validation (types, required fields)
     2. Dependency reference validation (all depends_on targets exist)
-    3. reads_from reference validation (all reads_from targets exist)
-    4. Cycle detection (topological sort)
-    5. Output path uniqueness
+    3. Cycle detection (topological sort)
+    4. Output path uniqueness
     """
     dag = DagFile(**raw)
     task_ids = set(dag.tasks.keys())
@@ -143,16 +154,6 @@ def validate_dag(raw: dict) -> DagFile:
             if dep not in task_ids:
                 raise ValueError(
                     f"Task '{task_id}' depends on '{dep}' which does not exist. "
-                    f"Available tasks: {sorted(task_ids)}"
-                )
-
-    # Validate reads_from references
-    for task_id, task in dag.tasks.items():
-        reads_from = getattr(task.config, "reads_from", [])
-        for ref in reads_from:
-            if ref not in task_ids:
-                raise ValueError(
-                    f"Task '{task_id}' reads_from '{ref}' which does not exist. "
                     f"Available tasks: {sorted(task_ids)}"
                 )
 
@@ -183,10 +184,12 @@ def validate_dag(raw: dict) -> DagFile:
             "Check depends_on fields for circular references."
         )
 
-    # Output path uniqueness
+    # Output path uniqueness (skip directory paths — multiple outputs can share a dir)
     seen_paths: dict[str, str] = {}
     for task_id, task in dag.tasks.items():
         for out_name, out_def in task.outputs.items():
+            if out_def.path.endswith("/"):
+                continue
             if out_def.path in seen_paths:
                 raise ValueError(
                     f"Duplicate output path '{out_def.path}' in tasks "

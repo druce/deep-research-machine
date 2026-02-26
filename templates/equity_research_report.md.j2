@@ -1,0 +1,430 @@
+# Equity Research Report: {{ symbol }}
+
+**Company:** {{ company_name }}
+**Sector:** {{ sector }} | **Industry:** {{ industry }}
+**Price:** ${{ latest_price }} | **Market Cap:** ${{ market_cap }}
+**Report Date:** {{ timestamp }}
+
+---
+
+## 1. Executive Summary
+
+{% if overall_assessment %}
+{{ overall_assessment }}
+{% else %}
+**Investment Thesis:** {{ company_name }} operates in the {{ industry }} sector with {{ market_cap }} market capitalization. {% if technical_analysis and technical_analysis.trend_signals.above_200sma %}Technical indicators show positive long-term trend.{% endif %} Further analysis of risk/reward profile is detailed in Section 12.
+{% endif %}
+
+**Risk/Reward Profile:** {% if risk_level %}{{ risk_level }}{% else %}[To be determined based on full analysis]{% endif %}
+
+---
+
+## 2. Fundamentals vs Peers
+
+{% if peers %}
+### Comparative Analysis
+
+| Symbol | Name | Price | Market Cap | P/E | Revenue | Margin | ROE |
+|--------|------|-------|------------|-----|---------|--------|-----|
+| **{{ symbol }}** | **{{ company_name }}** | **${{ latest_price }}** | **${{ market_cap }}** | **{{ trailing_pe }}** | {% if revenue != 'N/A' %}**${{ (revenue | replace(',', '') | float / 1000000000) | round(1) }}B**{% else %}**N/A**{% endif %} | **{{ profit_margin }}%** | **{{ roe }}%** |
+{%- for peer in peers[:8] %}
+| {{ peer.symbol }} | {{ peer.name }} | ${{ peer.price }} | ${{ peer.market_cap }} | {{ peer.pe_ratio }} | {{ peer.revenue }} | {{ peer.profit_margin }} | {{ peer.roe }} |
+{%- endfor %}
+
+**Key Metrics:**
+- **P/E:** Price-to-Earnings ratio (trailing twelve months)
+- **Revenue:** Annual revenue in billions (TTM)
+- **Margin:** Net profit margin percentage
+- **ROE:** Return on Equity percentage
+
+{% if trailing_pe and peers[0].pe_ratio != 'N/A' %}
+**Analysis:** {{ symbol }} trades at a P/E of {{ trailing_pe }}{% if peers | length > 0 %}, compared to peers ranging from {{ peers | map(attribute='pe_ratio') | select('!=', 'N/A') | list | min }} to {{ peers | map(attribute='pe_ratio') | select('!=', 'N/A') | list | max }}{% endif %}.
+{% endif %}
+
+{% else %}
+### Company Fundamentals
+
+{% if trailing_pe %}
+- **P/E Ratio (Trailing):** {{ trailing_pe }}
+- **P/E Ratio (Forward):** {{ forward_pe }}
+- **PEG Ratio:** {{ peg_ratio }}
+- **Price/Book:** {{ price_to_book }}
+- **Price/Sales:** {{ price_to_sales }}
+{% endif %}
+
+{% if profit_margin %}
+- **Profit Margin:** {{ profit_margin }}%
+- **Operating Margin:** {{ operating_margin }}%
+- **ROE:** {{ roe }}%
+- **ROA:** {{ roa }}%
+{% endif %}
+
+{% if revenue %}
+- **Revenue:** ${{ revenue }}
+- **Revenue/Share:** ${{ revenue_per_share }}
+- **Revenue Growth:** {{ quarterly_revenue_growth }}%
+{% endif %}
+{% endif %}
+
+---
+
+## 3. Extended Profile
+
+### Company History & Origin Story
+{% if wikipedia_summary %}
+{{ wikipedia_summary }}
+{% else %}
+{% if business_summary %}
+{{ business_summary }}
+{% else %}
+*Company history not available*
+{% endif %}
+{% endif %}
+
+### Core Business & Competitors
+{% if business_model_analysis %}
+{{ business_model_analysis }}
+{% else %}
+**Sector:** {{ sector }}
+**Industry:** {{ industry }}
+
+{% if sec_item1_business %}
+{{ sec_item1_business }}
+{% endif %}
+
+**Key Competitors:**
+{% if peers %}
+{%- for peer in peers[:10] %}
+- {{ peer.name }} ({{ peer.symbol }})
+{%- endfor %}
+{% endif %}
+{% endif %}
+
+### Recent Major News
+{% if news_stories %}
+{{ news_stories }}
+{% else %}
+*Recent news not available*
+{% endif %}
+
+---
+
+## 4. Business Model
+
+{% if business_profile %}
+{{ business_profile }}
+{% else %}
+### Core Business Description
+{% if sec_item1_business %}
+{{ sec_item1_business }}
+{% else %}
+{% if business_summary %}
+{{ business_summary }}
+{% endif %}
+{% endif %}
+
+### Revenue Streams
+{% if revenue %}
+- **Total Revenue:** ${{ revenue }}
+- **Revenue Per Share:** ${{ revenue_per_share }}
+- **Quarterly Revenue Growth:** {{ quarterly_revenue_growth }}%
+{% endif %}
+
+### Market Characteristics
+*Detailed market analysis requires additional research*
+
+- Industry: {{ industry }}
+- Sector: {{ sector }}
+{% if profit_margin %}
+- Profit Margin: {{ profit_margin }}%
+- Operating Margin: {{ operating_margin }}%
+{% endif %}
+
+### Competitive Advantages
+*Sources of competitive advantage require detailed analysis - see Business Profile section above for insights*
+{% endif %}
+
+---
+
+## 5. Competitive Landscape
+
+{% if competitive_analysis %}
+{{ competitive_analysis }}
+{% else %}
+### Market Position
+**Industry:** {{ industry }}
+
+### Direct Competitors
+{% if peers %}
+| Company | Symbol | Market Cap | Price |
+|---------|--------|------------|-------|
+{%- for peer in peers[:10] %}
+| {{ peer.name }} | {{ peer.symbol }} | ${{ peer.market_cap }} | ${{ peer.price }} |
+{%- endfor %}
+{% endif %}
+
+### Competitive Analysis
+*Detailed competitive analysis available in Business Profile section*
+{% endif %}
+
+---
+
+## 6. Supply Chain Positioning
+
+{% if supply_chain_analysis %}
+{{ supply_chain_analysis }}
+{% else %}
+{% if sec_item1_supply_chain %}
+{{ sec_item1_supply_chain }}
+{% else %}
+*Detailed supply chain analysis requires review of SEC 10-K Item 1 (Business Description)*
+
+{% if sec_filing_url %}
+**Reference:** [SEC 10-K Filing]({{ sec_filing_url }})
+{% endif %}
+{% endif %}
+{% endif %}
+
+---
+
+## 7. Financial & Operating Leverage
+
+### Financial Leverage
+{% if debt_metrics %}
+{{ debt_metrics }}
+{% else %}
+*Detailed debt analysis requires balance sheet review*
+
+**Available Data:**
+{% if balance_sheet_file %}
+- Balance Sheet: `{{ balance_sheet_file }}`
+{% endif %}
+{% if cash_flow_file %}
+- Cash Flow Statement: `{{ cash_flow_file }}`
+{% endif %}
+{% endif %}
+
+### Operating Leverage
+{% if profit_margin %}
+**Margins:**
+- Gross Profit: ${{ gross_profit }}
+- EBITDA: ${{ ebitda }}
+- Operating Margin: {{ operating_margin }}%
+- Profit Margin: {{ profit_margin }}%
+{% endif %}
+
+### Cash Flow & Capital Allocation
+*Requires detailed cash flow statement analysis*
+
+{% if cash_flow_file %}
+**Reference:** Cash flow data available in `{{ cash_flow_file }}`
+{% endif %}
+
+---
+
+## 8. Valuation
+
+### Valuation Metrics
+{% if trailing_pe %}
+| Metric | Value |
+|--------|-------|
+| **P/E Ratio (Trailing)** | {{ trailing_pe }} |
+| **P/E Ratio (Forward)** | {{ forward_pe }} |
+| **PEG Ratio** | {{ peg_ratio }} |
+| **Price/Book** | {{ price_to_book }} |
+| **Price/Sales** | {{ price_to_sales }} |
+| **Enterprise Value** | {{ enterprise_value }} |
+{% endif %}
+
+### Valuation Methodologies
+**Appropriate Methods for {{ industry }}:**
+- Income-based: Discounted Cash Flow (DCF)
+- Market-based: Peer multiples comparison
+- Asset-based: Book value analysis
+{% if industry in ['Technology', 'Software'] %}
+- Growth-adjusted metrics (PEG ratio)
+{% endif %}
+
+### Analyst Opinions
+{% if analyst_recommendations %}
+**Recent Analyst Actions:**
+{% for rec in analyst_recommendations[-10:] %}
+- **{{ rec.Firm }}:** {{ rec['To Grade'] }} ({{ rec.Date }})
+{% endfor %}
+{% else %}
+*Analyst recommendations not available*
+{% endif %}
+
+### Market Characteristics
+{% if technical_analysis %}
+- **Volatility (ATR):** ${{ technical_analysis.indicators.atr_14 }}
+- **Average Daily Volume:** {{ technical_analysis.indicators.avg_volume_20d | int | format_number }} shares
+{% endif %}
+- **Institutional Ownership:** {% if held_percent_institutions %}{{ held_percent_institutions }}%{% else %}N/A{% endif %}
+- **Insider Ownership:** {% if held_percent_insiders %}{{ held_percent_insiders }}%{% else %}N/A{% endif %}
+
+---
+
+## 9. Recent Developments, News & Risk Factors
+
+### Significant News (Last 12 Months)
+{% if recent_news_analysis %}
+{{ recent_news_analysis }}
+{% else %}
+{% if news_stories %}
+{{ news_stories }}
+{% endif %}
+{% endif %}
+
+### Executive Leadership
+{% if executive_profiles %}
+{{ executive_profiles }}
+{% else %}
+*Executive profiles not available*
+{% endif %}
+
+### Investigative Reports & Deep Research
+{% if investigative_reports %}
+{{ investigative_reports }}
+{% else %}
+*Requires additional Perplexity research on investigative reports and analyst deep dives*
+{% endif %}
+
+### Regulatory & Legal Issues
+{% if sec_item1_regulations %}
+{{ sec_item1_regulations }}
+{% else %}
+*Regulatory information available in SEC 10-K filing*
+{% endif %}
+
+### M&A Potential
+**Potential Acquisition Targets/Acquirers:**
+*Analysis of strategic fit, complementary capabilities, and market positioning required*
+
+### Key Themes & Trends
+{% if key_themes %}
+{{ key_themes }}
+{% else %}
+*Key themes identified in business profile and news analysis above*
+{% endif %}
+
+---
+
+## 10. Conclusion
+
+### Strategic Position Summary
+{% if conclusion_summary %}
+{{ conclusion_summary }}
+{% else %}
+{{ company_name }} operates in the {{ industry }} sector with current market capitalization of ${{ market_cap }}.
+{% if technical_analysis and technical_analysis.trend_signals.above_200sma %}
+The stock shows positive long-term technical momentum, trading above its 200-day moving average.
+{% endif %}
+{% endif %}
+
+### SWOT Analysis
+
+**Strengths:**
+{% if strengths %}
+{{ strengths }}
+{% else %}
+- Market position in {{ industry }}
+{% if profit_margin %}- {{ profit_margin }}% profit margin{% endif %}
+{% if technical_analysis and technical_analysis.trend_signals.above_200sma %}- Positive technical trend{% endif %}
+- [Additional strengths from analysis above]
+{% endif %}
+
+**Weaknesses:**
+{% if weaknesses %}
+{{ weaknesses }}
+{% else %}
+- [Identified through financial and competitive analysis]
+- Review debt levels and cash flow metrics
+- Assess competitive pressures
+{% endif %}
+
+**Opportunities:**
+{% if opportunities %}
+{{ opportunities }}
+{% else %}
+- Industry growth potential
+- Market expansion opportunities
+- Product development pipeline
+- [Additional opportunities from business profile]
+{% endif %}
+
+**Threats:**
+{% if threats %}
+{{ threats }}
+{% else %}
+- Competitive threats in {{ industry }}
+- Market volatility
+- Regulatory risks
+- [Additional threats from risk analysis]
+{% endif %}
+
+### Investment Cases
+
+**Bull Case:**
+{% if bull_case %}
+{{ bull_case }}
+{% else %}
+- Strong market position
+{% if quarterly_revenue_growth %}- Revenue growth of {{ quarterly_revenue_growth }}%{% endif %}
+- Industry tailwinds
+{% if technical_analysis and technical_analysis.trend_signals.macd_bullish %}- Positive momentum indicators{% endif %}
+{% endif %}
+
+**Bear Case:**
+{% if bear_case %}
+{{ bear_case }}
+{% else %}
+- Competitive pressures
+- Valuation concerns
+- Market risks
+- Execution challenges
+{% endif %}
+
+### Risk Level Assessment
+{% if risk_level %}
+**Overall Risk Level:** {{ risk_level }}
+{% else %}
+**Overall Risk Level:** [To be determined]
+
+Factors to consider:
+- Industry volatility
+- Company-specific risks
+- Financial leverage
+- Market position
+{% endif %}
+
+### Critical Watch Points
+{% if watch_points %}
+{{ watch_points }}
+{% else %}
+**Key Monitoring Points:**
+1. Quarterly earnings trends and guidance
+2. Competitive developments and market share changes
+3. Regulatory or legal developments
+4. Management commentary and strategic initiatives
+5. Analyst rating changes and institutional ownership shifts
+6. Technical support/resistance levels
+7. Industry-specific catalysts
+{% endif %}
+
+---
+
+## Data Sources & Methodology
+
+**Primary Sources:**
+- **Technical Analysis:** yfinance, TA-Lib
+- **Fundamental Data:** yfinance, OpenBB (FMP provider)
+- **Deep Research:** Perplexity AI (sonar-pro model)
+- **SEC Filings:** SEC EDGAR (10-K, 10-Q, 8-K)
+- **Company Information:** Wikipedia, company filings
+
+**Date Range:** Analysis based on data through {{ timestamp }}
+
+---
+
+*This report is for informational purposes only and should not be considered investment advice. Please conduct your own due diligence and consult with financial professionals before making investment decisions.*

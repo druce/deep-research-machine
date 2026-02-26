@@ -1,0 +1,74 @@
+ipykernel
+python-dotenv
+anthropic
+claude-agent-sdk
+openai
+finnhub-python
+openbb
+openbb-alpha-vantage
+openbb-benzinga
+openbb-biztoc
+openbb-cboe
+openbb-charting
+openbb-commodity
+openbb-core
+openbb-crypto
+openbb-currency
+openbb-derivatives
+openbb-ecb
+openbb-econdb
+openbb-econometrics
+openbb-economy
+openbb-equity
+openbb-etf
+openbb-federal-reserve
+openbb-finra
+openbb-finviz
+openbb-fixedincome
+openbb-fmp
+openbb-fred
+openbb-government-us
+openbb-index
+openbb-intrinio
+openbb-nasdaq
+openbb-news
+openbb-oecd
+openbb-polygon
+openbb-quantitative
+openbb-regulators
+openbb-sec
+openbb-seeking-alpha
+openbb-stockgrid
+openbb-technical
+openbb-tiingo
+openbb-tmx
+openbb-tradier
+openbb-tradingeconomics
+openbb-wsj
+openbb-yfinance
+openai
+tiktoken
+pydantic #
+langchain
+langchain-openai
+langchain-community
+# magentic
+wikipedia
+wikipedia-api
+edgartools
+sec-api
+sec-downloader
+sec-parser
+sec-edgar-downloader
+streamlit
+kaleido
+beautifulsoup4
+python-docx
+lxml
+
+# needs
+# brew install pandoc
+# brew install ta-lib
+# export TA_INCLUDE_PATH="$(brew --prefix ta-lib)/include"
+# export TA_LIBRARY_PATH="$(brew --prefix ta-lib)/lib"
+TA-Lib

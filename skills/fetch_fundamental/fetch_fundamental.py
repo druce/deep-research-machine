@@ -517,6 +517,8 @@ def save_key_ratios(symbol: str, work_dir: Path, peers_file: str = None) -> bool
             peers_file = str(work_dir / "artifacts" / "peers_list.json")
 
         pf = Path(peers_file)
+        if not pf.is_absolute() and not pf.exists():
+            pf = work_dir / pf
         if pf.exists():
             try:
                 with pf.open("r") as f:
