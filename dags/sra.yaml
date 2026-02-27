@@ -118,7 +118,7 @@ tasks:
     depends_on: [profile, technical, fundamental, perplexity, fetch_edgar, wikipedia, perplexity_analysis]
     config:
       system: "You are a senior equity research analyst writing a professional report."
-      tools: all
+      disallowed_tools: []
       prompt: |
         I have collected comprehensive information on ${ticker} in the directory ${workdir}.
 
@@ -192,7 +192,7 @@ tasks:
     depends_on: [write_body]
     config:
       system: "You are a senior equity research analyst writing a professional report."
-      tools: [read, write]
+      disallowed_tools: [yfinance, alphavantage, brave-search, perplexity-ask, wikipedia, playwright, fetch, filesystem]
       prompt: |
         read the draft report body at artifacts/draft_report_body.md carefully and write a concluding 1-3 short paragraphs < 500 words total.
             • Summarize the company's strategic position and the stock's investment risk/reward profile
@@ -210,7 +210,7 @@ tasks:
     depends_on: [write_body, write_conclusion]
     config:
       system: "You are a senior equity research analyst writing a professional report."
-      tools: [read, write]
+      disallowed_tools: [yfinance, alphavantage, brave-search, perplexity-ask, wikipedia, playwright, fetch, filesystem]
       prompt: |
         read the draft report body at artifacts/draft_report_body.md and the conclusion at artifacts/draft_report_conclusion.md carefully, then write a short introductory paragraph < 100 words.
 
@@ -240,7 +240,7 @@ tasks:
     depends_on: [assemble_text]
     config:
       system: "You are a senior equity research editor with expertise in financial analysis and report quality."
-      tools: [read, write]
+      disallowed_tools: [yfinance, alphavantage, brave-search, perplexity-ask, wikipedia, playwright, fetch, filesystem]
       prompt: |
         Read the assembled report at artifacts/report_body.md carefully and provide a detailed critique.
 
@@ -268,7 +268,7 @@ tasks:
     depends_on: [critique_body_final]
     config:
       system: "You are a senior equity research analyst revising a report based on editorial feedback."
-      tools: [read, write]
+      disallowed_tools: [yfinance, alphavantage, brave-search, perplexity-ask, wikipedia, playwright, fetch, filesystem]
       prompt: |
         Read the critique at artifacts/report_critique.md and the current report at artifacts/report_body.md.
 
