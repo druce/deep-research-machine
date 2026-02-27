@@ -13,6 +13,7 @@ Usage:
 import argparse
 import asyncio
 import json
+import os
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -79,7 +80,9 @@ async def run_python_task(task: dict, workdir: Path, ticker: str) -> dict:
             continue
         flag = f"--{key.replace('_', '-')}"
         cmd.append(flag)
-        cmd.append(str(val))
+        # Split space-separated values into multiple args (e.g. --file a=x b=y c=z)
+        parts = str(val).split()
+        cmd.extend(parts)
 
     stderr_log = workdir / f"{task['id']}_stderr.log"
 
@@ -164,15 +167,25 @@ async def run_claude_task(task: dict, workdir: Path) -> dict:
     if params.get("model"):
         cmd.extend(["--model", params["model"]])
 
+    # Save prompt for debugging
+    prompt_file = workdir / f"{task['id']}_prompt.txt"
+    prompt_file.write_text(prompt)
+
+    # Clear CLAUDECODE env var to allow nested invocation
+    env = {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
+
+    stderr_log = workdir / f"{task['id']}_stderr.log"
     log(f"  [{task['id']}] Running claude task")
 
-    proc = await asyncio.create_subprocess_exec(
-        *cmd,
-        stdin=asyncio.subprocess.PIPE,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
-    stdout_bytes, stderr_bytes = await proc.communicate(input=prompt.encode())
+    with open(stderr_log, "w") as err_f:
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=err_f,
+            env=env,
+        )
+        stdout_bytes, _ = await proc.communicate(input=prompt.encode())
 
     # Check if expected output files were produced
     missing = []
