@@ -4,32 +4,34 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Stock Research Agent 2.0 — a Claude Code-orchestrated equity research pipeline. Claude Code is the orchestrator (no Python orchestration layer). A `/research` skill handles interactive setup, initializes a SQLite database, and runs a DAG defined in YAML. A `/taskrunner` skill dispatches individual tasks.
+Stock Research Agent — an async Python-orchestrated equity research pipeline. `research.py` reads a DAG defined in YAML, initializes a SQLite database, and runs waves of tasks as async subprocesses. Python data-gathering scripts run via `uv run python`, Claude writing tasks run via `claude --dangerously-skip-permissions -p`.
 
 ## Architecture
 
-**Two-layer orchestration:**
+**Single orchestrator:** `research.py` (asyncio) handles the full lifecycle:
+1. Validates DAG YAML and initializes SQLite via `db.py`
+2. Loops: query `db.py task-ready` → dispatch all ready tasks in parallel → collect results → update DB → repeat
+3. Python tasks: spawns `uv run python {script}`, parses JSON manifest from stdout
+4. Claude tasks: spawns `claude -p` with prompt (system + artifact context + task prompt), checks output files
+5. All DB writes centralized in orchestrator (tasks never touch the database)
 
-1. **`/research` skill** (DAG runner): Takes a ticker, creates `work/{SYMBOL}_{DATE}/`, initializes `research.db` from `dags/sra.yaml`, presents DAG to user for confirmation/editing, then loops: query `db.py task-ready` → dispatch all ready tasks in parallel via `/taskrunner` → wait → repeat until done.
-2. **`/taskrunner` skill** (task dispatcher): Reads task config from `research.db`, dispatches based on task type:
-   - `python` → runs Python script with argparse-style args
-   - `claude` → invokes Claude Code CLI with prompt, tools, and artifact context
-   - `shell` → runs shell command
+**Artifact context:** `manifest.json` is written before each wave, listing all artifacts produced so far. Claude tasks read this file to discover available research data.
 
 **Data layer:** SQLite + files hybrid. One database per run at `work/{SYMBOL}_{DATE}/research.db`. All components access shared state through `db.py` CLI only — no direct SQLite access elsewhere.
 
 **DAG execution order** (driven by dependencies, not hardcoded stages):
-1. `profile`, `technical` (no deps)
-2. `fundamental`, `perplexity`, `sec_edgar`, `wikipedia`, `analysis` (depend on profile)
-3. Body writer tasks (~10, depend on data-gathering tasks)
-4. `write_executive_summary`, `write_conclusion` (depend on body writers)
-5. `assembly` (depends on all writers)
-6. `polish` (depends on assembly)
+1. `profile` (no deps)
+2. `technical`, `fundamental`, `perplexity`, `fetch_edgar`, `wikipedia`, `perplexity_analysis` (depend on profile)
+3. `write_body` (depends on all data-gathering tasks)
+4. `write_conclusion` (depends on write_body), then `write_intro` (depends on both)
+5. `assemble_text` (depends on all writers)
+6. `critique_body_final` → `polish_body_final` → `final_assembly`
 
 ## Key Files
 
 | File | Purpose |
 |------|---------|
+| `research.py` | Async DAG orchestrator — entry point for full pipeline |
 | `skills/db.py` | Core SQLite CLI — init, validate, task-ready, task-get, task-update, artifact-add, artifact-list, status, research-update |
 | `skills/schema.py` | Pydantic models for DAG YAML v2 schema validation |
 | `skills/config.py` | Centralized constants (timeouts, API keys, indicator params, model settings) |
@@ -40,12 +42,10 @@ Stock Research Agent 2.0 — a Claude Code-orchestrated equity research pipeline
 | `skills/fetch_perplexity/` | Perplexity AI research (news, profiles, executives) |
 | `skills/fetch_edgar/` | SEC filings (10-K, 10-Q, 8-K) |
 | `skills/fetch_wikipedia/` | Wikipedia company summary |
-| `skills/fetch_analysis/` | Business model, competitive, risk, thesis analysis via Perplexity |
+| `skills/fetch_perplexity_analysis/` | Business model, competitive, risk, thesis analysis via Perplexity |
 | `dags/sra.yaml` | Default DAG (v2 schema) defining all tasks with typed configs and dependencies |
 | `templates/*.md.j2` | Jinja2 report assembly templates |
-| `DESIGN.md` | Single architecture reference — db.py, DAG runner, taskrunner, error handling |
-| `IMPLEMENTATION.md` | Step-by-step build plan (5 phases) |
-| `SPEC_*.md` | Script-specific specs (profile, technical, fundamental, etc.) |
+| `docs/plans/` | Design docs and implementation plans |
 
 ## Commands
 
@@ -88,13 +88,11 @@ uv add <package>
 ```
 
 ### Full pipeline
-```
-/research SYMBOL
+```bash
+./research.py SYMBOL [--dag dags/sra.yaml] [--date YYYYMMDD]
 ```
 
 ## Python Coding Conventions
-
-When creating or modifying Python skills, always read and follow `SKILLS_BEST_PRACTICES_CHEATSHEET.md` — it is the authoritative reference for file headers, argument parsing, function signatures, exception handling, path operations, logging, and formatting patterns. Key points:
 
 - `#!/usr/bin/env python3` shebang (never hardcoded paths)
 - Import constants from `config.py`, utilities from `utils.py`
@@ -104,9 +102,8 @@ When creating or modifying Python skills, always read and follow `SKILLS_BEST_PR
 - Specific exception handling (no bare `except:`)
 - Return `(success: bool, data, error_msg)` tuples from data functions
 - Return exit codes from `main()` (0 = success, nonzero = error)
+- JSON manifest to stdout: `{"status": "complete", "artifacts": [...], "error": null}`
 
 ## Environment
 
-Requires a `.env` file with API keys: `ANTHROPIC_API_KEY`, `PERPLEXITY_API_KEY`, `SEC_FIRM`, `SEC_USER`, and others. 
-
-Sw
+Requires a `.env` file with API keys: `ANTHROPIC_API_KEY`, `PERPLEXITY_API_KEY`, `SEC_FIRM`, `SEC_USER`, `FINNHUB_API_KEY`, and others.

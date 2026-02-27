@@ -1,11 +1,11 @@
-# Stock Research Agent 2.0
+# Stock Research Agent
 
-An AI-orchestrated equity research pipeline that generates comprehensive analyst-style reports. Claude Code drives a DAG of data-gathering scripts and writing agents, producing a polished report from a single command.
+An async Python-orchestrated equity research pipeline that generates comprehensive analyst-style reports. A single script drives a DAG of data-gathering tasks and Claude writing agents, producing a polished report from one command.
 
 ## How It Works
 
-```
-/research AMD 20260225
+```bash
+./research.py AMD --date 20260225
 ```
 
 This triggers a 14-task pipeline:
@@ -38,14 +38,11 @@ profile ─────┬── technical
 
 ## Architecture
 
-Two Claude Code skills orchestrate everything:
-
-| Skill | Role |
-|-------|------|
-| `/research` | DAG runner — initializes the database, loops `task-ready → dispatch → wait`, handles failures |
-| `/taskrunner` | Task dispatcher — runs a single task (`python` script or `claude` subagent), registers artifacts |
+**Orchestrator:** `research.py` — a single async Python script that reads the DAG, initializes the database, and runs waves of tasks as parallel subprocesses. Python data-gathering tasks run via `uv run python`, Claude writing tasks run via `claude --dangerously-skip-permissions -p`. All database writes are centralized in the orchestrator.
 
 **State management**: One SQLite database per run (`work/{SYMBOL}_{DATE}/research.db`) tracks task status, dependencies, artifacts, and runtime variables. All components access state through `skills/db.py` — no direct SQL elsewhere.
+
+**Artifact context**: A `manifest.json` file is maintained before each wave, listing all produced artifacts. Claude tasks read this file to discover available research data.
 
 **DAG definition**: `dags/sra.yaml` declares tasks, types, dependencies, configs, and expected outputs in a version-2 schema validated by Pydantic.
 
@@ -112,11 +109,11 @@ FINNHUB_API_KEY=...
 
 ### Full pipeline
 
-```
-/research SYMBOL [DATE]
+```bash
+./research.py SYMBOL [--dag dags/sra.yaml] [--date YYYYMMDD]
 ```
 
-The `/research` command initializes the database, presents the task DAG for confirmation, then executes all tasks in dependency order with parallel dispatch.
+The orchestrator validates the DAG, initializes the database, then executes waves of tasks in dependency order with parallel dispatch. Auto-skips failures and continues.
 
 ### Individual data scripts
 
@@ -177,10 +174,7 @@ uv run ./skills/db.py status --workdir work/AMD_20260225
 ├── templates/
 │   ├── assemble_report.md.j2       # Section concatenation
 │   └── final_report.md.j2          # Final formatted report
-├── .claude/commands/
-│   ├── research.md                 # /research pipeline runner
-│   ├── taskrunner.md               # /taskrunner task dispatcher
-│   └── db.md                       # /db database CLI
+├── research.py                       # Async DAG orchestrator (entry point)
 ├── tests/
 │   ├── test_db.py
 │   └── test_schema.py

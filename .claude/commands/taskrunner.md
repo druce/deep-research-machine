@@ -1,8 +1,8 @@
 ---
-description: Execute a single DAG task — dispatches python or claude task types through the full lifecycle
+description: "DEPRECATED: Task dispatch is now handled by research.py"
 ---
 
-# Task Runner
+# Task Runner (DEPRECATED — dispatch logic is now in `research.py`)
 
 **Arguments:** $ARGUMENTS (expects: TASK_ID --workdir WORKDIR)
 

@@ -1,8 +1,8 @@
 ---
-description: Run the full equity research pipeline for a ticker
+description: "DEPRECATED: Use ./research.py instead. Run the full equity research pipeline for a ticker"
 ---
 
-# Research Pipeline
+# Research Pipeline (DEPRECATED — use `./research.py SYMBOL` instead)
 
 **Arguments:** $ARGUMENTS (expects: SYMBOL DATE, e.g. AAPL 20260225)
 

@@ -70,7 +70,9 @@ Save your output to {absolute_workdir}/{output_path}
 EOF
 ```
 
-- Stdout/stderr captured
+- Prompt piped via stdin, stdout/stderr captured (stderr to `{task_id}_stderr.log`)
+- Prompt also saved to `{task_id}_prompt.txt` for debugging
+- `CLAUDECODE` env var cleared to allow invocation from within Claude Code sessions
 - Success determined by: output files exist at expected paths
 - If output files missing → task failed
 
