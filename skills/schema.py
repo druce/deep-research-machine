@@ -204,6 +204,23 @@ def validate_dag(raw: dict) -> DagFile:
                 )
             seen_paths[out_def.path] = task_id
 
+    # Validate critic-optimizer config consistency
+    for task_id, task in dag.tasks.items():
+        if not hasattr(task.config, 'n_iterations'):
+            continue
+        n = task.config.n_iterations
+        if n > 0:
+            if not task.config.critic_prompt:
+                raise ValueError(
+                    f"Task '{task_id}' has n_iterations={n} but no critic_prompt. "
+                    f"Both critic_prompt and rewrite_prompt are required when n_iterations > 0."
+                )
+            if not task.config.rewrite_prompt:
+                raise ValueError(
+                    f"Task '{task_id}' has n_iterations={n} but no rewrite_prompt. "
+                    f"Both critic_prompt and rewrite_prompt are required when n_iterations > 0."
+                )
+
     return dag
 
 

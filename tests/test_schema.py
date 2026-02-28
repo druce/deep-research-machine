@@ -436,6 +436,91 @@ def test_validate_dag_duplicate_output_paths():
         validate_dag(raw)
 
 
+def test_validate_dag_critic_missing_prompts():
+    """n_iterations > 0 without both prompts should fail validation."""
+    raw = {
+        "dag": {"version": 2, "name": "Test"},
+        "tasks": {
+            "write": {
+                "description": "Write",
+                "type": "claude",
+                "config": {
+                    "prompt": "Write a section",
+                    "n_iterations": 1,
+                    "critic_prompt": "Critique it",
+                    # rewrite_prompt missing
+                },
+                "outputs": {"section": {"path": "artifacts/section.md", "format": "md"}},
+            },
+        },
+    }
+    with pytest.raises(ValueError, match="rewrite_prompt"):
+        validate_dag(raw)
+
+
+def test_validate_dag_critic_missing_critic_prompt():
+    """n_iterations > 0 without critic_prompt should fail."""
+    raw = {
+        "dag": {"version": 2, "name": "Test"},
+        "tasks": {
+            "write": {
+                "description": "Write",
+                "type": "claude",
+                "config": {
+                    "prompt": "Write a section",
+                    "n_iterations": 1,
+                    # critic_prompt missing
+                    "rewrite_prompt": "Rewrite it",
+                },
+                "outputs": {"section": {"path": "artifacts/section.md", "format": "md"}},
+            },
+        },
+    }
+    with pytest.raises(ValueError, match="critic_prompt"):
+        validate_dag(raw)
+
+
+def test_validate_dag_critic_zero_iterations_ok():
+    """n_iterations=0 with no prompts is fine (default)."""
+    raw = {
+        "dag": {"version": 2, "name": "Test"},
+        "tasks": {
+            "write": {
+                "description": "Write",
+                "type": "claude",
+                "config": {"prompt": "Write a section"},
+                "outputs": {"section": {"path": "artifacts/section.md", "format": "md"}},
+            },
+        },
+    }
+    dag = validate_dag(raw)
+    assert dag.tasks["write"].config.n_iterations == 0
+
+
+def test_validate_dag_critic_valid_config():
+    """Complete critic config passes validation."""
+    raw = {
+        "dag": {"version": 2, "name": "Test"},
+        "tasks": {
+            "write": {
+                "description": "Write",
+                "type": "claude",
+                "config": {
+                    "prompt": "Write a section",
+                    "n_iterations": 1,
+                    "critic_prompt": "Critique at ${draft_path}",
+                    "rewrite_prompt": "Rewrite based on ${critique_path}",
+                    "critic_disallowed_tools": ["yfinance"],
+                    "rewrite_disallowed_tools": ["yfinance"],
+                },
+                "outputs": {"section": {"path": "artifacts/section.md", "format": "md"}},
+            },
+        },
+    }
+    dag = validate_dag(raw)
+    assert dag.tasks["write"].config.n_iterations == 1
+
+
 # ---------------------------------------------------------------------------
 # Variable substitution tests (load_dag)
 # ---------------------------------------------------------------------------
