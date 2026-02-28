@@ -132,7 +132,7 @@ def test_task_ready_unlocks_after_dep_completes(workdir):
 
 def test_task_ready_failed_deps_dont_block(workdir):
     """A failed dependency should not block downstream tasks."""
-    # Complete all write_body deps except fetch_edgar (which fails)
+    # Complete all write_profile deps except fetch_edgar (which fails)
     for tid in ("profile", "technical", "fundamental", "perplexity", "wikipedia", "perplexity_analysis"):
         run_db("task-update", "--workdir", str(workdir), "--task-id", tid, "--status", "complete")
     run_db("task-update", "--workdir", str(workdir), "--task-id", "fetch_edgar", "--status", "failed",
@@ -141,7 +141,7 @@ def test_task_ready_failed_deps_dont_block(workdir):
     rc, out = run_db("task-ready", "--workdir", str(workdir))
     assert rc == 0
     ids = {t["id"] for t in out}
-    assert "write_body" in ids
+    assert "write_profile" in ids
 
 
 def test_task_ready_does_not_include_running(workdir):
@@ -419,7 +419,7 @@ def test_research_update_all_statuses(workdir):
 
 def test_task_context_with_deps(workdir):
     """task-context resolves dependency artifacts for a task."""
-    # write_body depends on: profile, technical, fundamental, perplexity, fetch_edgar, wikipedia, perplexity_analysis
+    # write_profile depends on: profile, technical, fundamental, perplexity, fetch_edgar, wikipedia, perplexity_analysis
     for task, name, fmt in [
         ("perplexity", "business_profile", "md"),
         ("wikipedia", "wikipedia_summary", "txt"),
@@ -430,9 +430,9 @@ def test_task_context_with_deps(workdir):
                "--path", f"artifacts/{name}.{fmt}", "--format", fmt,
                "--summary", f"{name} data")
 
-    rc, out = run_db("task-context", "--workdir", str(workdir), "--task-id", "write_body")
+    rc, out = run_db("task-context", "--workdir", str(workdir), "--task-id", "write_profile")
     assert rc == 0
-    assert out["task_id"] == "write_body"
+    assert out["task_id"] == "write_profile"
     assert len(out["artifacts"]) == 3
     names = {a["name"] for a in out["artifacts"]}
     assert names == {"business_profile", "wikipedia_summary", "filings_index"}
@@ -445,7 +445,7 @@ def test_task_context_artifact_fields(workdir):
            "--path", "artifacts/business_profile.md", "--format", "md",
            "--summary", "Business profile")
 
-    rc, out = run_db("task-context", "--workdir", str(workdir), "--task-id", "write_body")
+    rc, out = run_db("task-context", "--workdir", str(workdir), "--task-id", "write_profile")
     assert rc == 0
     for a in out["artifacts"]:
         assert "from_task" in a
@@ -535,3 +535,18 @@ def test_var_set_stored_in_task_params(workdir):
     assert params["sets_vars"]["symbol"]["key"] == "symbol"
     assert "company_name" in params["sets_vars"]
     assert params["sets_vars"]["company_name"]["key"] == "company_name"
+
+
+# ---------------------------------------------------------------------------
+# init — drafts_dir
+# ---------------------------------------------------------------------------
+
+
+def test_init_stores_drafts_dir(workdir):
+    """init stores drafts_dir from DAG header in research table."""
+    import sqlite3
+    conn = sqlite3.connect(str(workdir / "research.db"))
+    conn.row_factory = sqlite3.Row
+    row = conn.execute("SELECT drafts_dir FROM research LIMIT 1").fetchone()
+    conn.close()
+    assert row["drafts_dir"] == "drafts"

@@ -53,6 +53,7 @@ CREATE TABLE IF NOT EXISTS research (
     date          TEXT NOT NULL,
     dag_file      TEXT NOT NULL,
     template_dir  TEXT NOT NULL,
+    drafts_dir    TEXT NOT NULL DEFAULT 'drafts',
     workdir       TEXT NOT NULL,
     status        TEXT DEFAULT 'not started',
     created_at    TEXT DEFAULT (datetime('now')),
@@ -179,12 +180,13 @@ def cmd_init(args: argparse.Namespace) -> None:
 
     # Extract dag-level metadata
     template_dir = dag.dag.template_dir
+    drafts_dir = dag.dag.drafts_dir
 
     # Insert research row
     conn.execute(
-        """INSERT INTO research (ticker, date, dag_file, template_dir, workdir, status)
-           VALUES (?, ?, ?, ?, ?, 'not started')""",
-        (args.ticker, args.date, str(dag_path), template_dir, str(workdir))
+        """INSERT INTO research (ticker, date, dag_file, template_dir, drafts_dir, workdir, status)
+           VALUES (?, ?, ?, ?, ?, ?, 'not started')""",
+        (args.ticker, args.date, str(dag_path), template_dir, drafts_dir, str(workdir))
     )
 
     # Process tasks from validated model
