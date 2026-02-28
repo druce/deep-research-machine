@@ -16,6 +16,7 @@ Exit codes:
 import argparse
 import csv
 import json
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -55,25 +56,27 @@ def load_text(path: Path) -> Optional[str]:
         return f.read()
 
 
-def load_ratios_csv(path: Path) -> Dict[str, str]:
+def load_ratios_csv(path: Path) -> Dict[str, Dict[str, str]]:
     """
-    Load key_ratios.csv into a dict keyed by Metric name.
+    Load key_ratios.csv into a nested dict keyed by ticker then metric.
 
-    CSV format: Category,Metric,SYMBOL
-    Returns: {"Trailing P/E": "80.79", "Profit Margin": "12.52%", ...}
+    CSV format: Category,Metric,TICKER1,TICKER2,...
+    Returns: {"HOOD": {"Trailing P/E": "37.00", ...}, "SCHW": {"Trailing P/E": "20.47", ...}}
     """
     if not path.exists():
         logger.warning("Ratios CSV not found: %s", path)
         return {}
-    ratios: Dict[str, str] = {}
+    all_ratios: Dict[str, Dict[str, str]] = {}
     with path.open("r") as f:
         reader = csv.DictReader(f)
+        ticker_cols = [k for k in (reader.fieldnames or []) if k not in ("Category", "Metric")]
+        for col in ticker_cols:
+            all_ratios[col] = {}
         for row in reader:
             metric = row.get("Metric", "")
-            value_keys = [k for k in row if k not in ("Category", "Metric")]
-            if value_keys:
-                ratios[metric] = row[value_keys[0]]
-    return ratios
+            for col in ticker_cols:
+                all_ratios[col][metric] = row.get(col, "N/A")
+    return all_ratios
 
 
 # ---------------------------------------------------------------------------
@@ -152,6 +155,19 @@ def extract_ratio(ratios: Dict[str, str], metric: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Text cleanup
+# ---------------------------------------------------------------------------
+
+def strip_leading_header(text: str) -> str:
+    """Remove leading markdown title and metadata lines before first ## section."""
+    lines = text.split("\n")
+    for i, line in enumerate(lines):
+        if line.startswith("## "):
+            return "\n".join(lines[i:]).strip()
+    return text
+
+
+# ---------------------------------------------------------------------------
 # Variable assembly
 # ---------------------------------------------------------------------------
 
@@ -170,31 +186,38 @@ def build_variables(artifacts_dir: Path) -> Dict[str, Any]:
         variables["market_cap"] = format_market_cap(profile.get("market_cap"))
         variables["timestamp"] = profile.get("timestamp", "")
 
-    # --- Chart ---
+    # --- Charts (relative paths so they resolve from the artifacts dir) ---
     chart_path = artifacts_dir / "chart.png"
-    variables["chart_path"] = str(chart_path) if chart_path.exists() else None
+    variables["chart_path"] = "chart.png" if chart_path.exists() else None
+
+    sankey_path = artifacts_dir / "income_statement_sankey.png"
+    variables["income_statement_sankey_path"] = "income_statement_sankey.png" if sankey_path.exists() else None
 
     # --- Technical Analysis ---
     tech_raw = load_json(artifacts_dir / "technical_analysis.json")
     variables["technical_analysis"] = map_technical(tech_raw) if tech_raw else None
 
-    # --- Key Ratios ---
-    ratios = load_ratios_csv(artifacts_dir / "key_ratios.csv")
+    # --- Key Ratios (all tickers) ---
+    all_ratios = load_ratios_csv(artifacts_dir / "key_ratios.csv")
+    symbol = variables.get("symbol", "")
+    ratios = all_ratios.get(symbol, {})
     variables["trailing_pe"] = extract_ratio(ratios, "Trailing P/E")
     variables["forward_pe"] = extract_ratio(ratios, "Forward P/E")
     variables["profit_margin"] = extract_ratio(ratios, "Profit Margin")
     variables["roe"] = extract_ratio(ratios, "Return on Equity")
     variables["revenue"] = ratios.get("Revenue (ttm)", "N/A")
 
-    # --- Peers ---
+    # --- Peers (enriched with ratios from CSV) ---
     peers_raw = load_json(artifacts_dir / "peers_list.json")
     if peers_raw:
         peers = transpose_peers(peers_raw)
         for peer in peers:
-            peer.setdefault("pe_ratio", "N/A")
-            peer.setdefault("revenue", "N/A")
-            peer.setdefault("profit_margin", "N/A")
-            peer.setdefault("roe", "N/A")
+            peer_sym = peer.get("symbol", "")
+            peer_ratios = all_ratios.get(peer_sym, {})
+            peer["pe_ratio"] = peer_ratios.get("Trailing P/E", "N/A")
+            peer["revenue"] = peer_ratios.get("Revenue (ttm)", "N/A")
+            peer["profit_margin"] = peer_ratios.get("Profit Margin", "N/A")
+            peer["roe"] = peer_ratios.get("Return on Equity", "N/A")
             peer["market_cap"] = format_market_cap(peer.get("market_cap"))
         variables["peers"] = peers
     else:
@@ -202,9 +225,14 @@ def build_variables(artifacts_dir: Path) -> Dict[str, Any]:
 
     # --- Written report sections ---
     variables["deep_research_output"] = (
-        load_text(artifacts_dir / "report_body.md")
+        load_text(artifacts_dir / "report_body_final.md")
+        or load_text(artifacts_dir / "report_body.md")
         or load_text(artifacts_dir / "draft_report_body.md")
     )
+    if variables.get("deep_research_output"):
+        variables["deep_research_output"] = strip_leading_header(
+            variables["deep_research_output"]
+        )
     variables["deep_conclusion"] = load_text(
         artifacts_dir / "draft_report_conclusion.md"
     )
@@ -317,11 +345,60 @@ def main() -> int:
 
     logger.info("✓ Final report written to %s", output_path)
 
+    artifacts = [
+        {"name": "final_report", "path": str(output_path), "format": "md"},
+    ]
+
+    # --- Convert to HTML via pandoc ---
+    html_path = output_path.with_suffix(".html")
+    title = f"{variables.get('company_name', '')} Equity Research Report"
+    css_path = project_root / TEMPLATES_DIR / "report.css"
+    pandoc_cmd = [
+        "pandoc", output_path.name,
+        "-o", html_path.name,
+        "--standalone",
+        "--metadata", f"title={title}",
+    ]
+    if css_path.exists():
+        pandoc_cmd.extend(["--include-in-header", str(css_path)])
+    try:
+        subprocess.run(
+            pandoc_cmd,
+            check=True, capture_output=True, cwd=str(artifacts_dir),
+        )
+        logger.info("✓ HTML report written to %s", html_path)
+        artifacts.append(
+            {"name": "final_report_html", "path": str(html_path), "format": "html"})
+    except FileNotFoundError:
+        logger.warning("pandoc not found — skipping HTML/PDF conversion")
+    except subprocess.CalledProcessError as e:
+        logger.warning("HTML conversion failed: %s", e.stderr.decode()[:500])
+
+    # --- Convert to PDF via weasyprint (from HTML) ---
+    pdf_path = output_path.with_suffix(".pdf")
+    if html_path.exists():
+        try:
+            # weasyprint uses cffi to load GLib/Pango; on macOS with Homebrew
+            # the .dylib files live under /opt/homebrew/lib and may not be on
+            # the default search path.
+            import os
+            _brew_lib = "/opt/homebrew/lib"
+            if Path(_brew_lib).is_dir():
+                os.environ.setdefault("DYLD_LIBRARY_PATH", _brew_lib)
+                existing = os.environ["DYLD_LIBRARY_PATH"]
+                if _brew_lib not in existing:
+                    os.environ["DYLD_LIBRARY_PATH"] = f"{_brew_lib}:{existing}"
+            from weasyprint import HTML
+            HTML(filename=str(html_path), base_url=str(artifacts_dir)).write_pdf(str(pdf_path))
+            logger.info("✓ PDF report written to %s", pdf_path)
+            artifacts.append(
+                {"name": "final_report_pdf", "path": str(pdf_path), "format": "pdf"})
+        except Exception as e:
+            logger.warning("PDF conversion failed: %s", e)
+
     manifest = {
         "status": "complete",
-        "artifacts": [
-            {"name": "final_report", "path": str(output_path), "format": "md"},
-        ],
+        "artifacts": artifacts,
         "error": None,
     }
     print(json.dumps(manifest))

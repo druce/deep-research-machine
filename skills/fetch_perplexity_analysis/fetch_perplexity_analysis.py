@@ -12,10 +12,10 @@ Usage:
     ./skills/fetch_perplexity_analysis/fetch_perplexity_analysis.py SYMBOL --workdir DIR
 
 Output:
-    - perplexity_analysis_business_model.md    Business model & moat analysis
-    - perplexity_analysis_competitive.md       Competitive landscape
-    - perplexity_analysis_risk.md              Categorized risk analysis
-    - perplexity_analysis_investment_thesis.md Bull/bear/base, SWOT, catalysts
+    - business_model_analysis.md    Business model & moat analysis
+    - competitive_analysis.md       Competitive landscape
+    - risk_analysis.md              Categorized risk analysis
+    - investment_thesis.md Bull/bear/base, SWOT, catalysts
 
     Prints JSON manifest to stdout.
     All progress/diagnostic output goes to stderr.
@@ -27,6 +27,7 @@ Exit codes:
 """
 
 import argparse
+import asyncio
 import json
 import os
 import sys
@@ -36,7 +37,7 @@ from pathlib import Path
 from typing import Optional
 
 import yfinance as yf
-from openai import OpenAI
+from openai import AsyncOpenAI
 
 # Add skills directory to path for local imports
 _SKILLS_DIR = Path(__file__).resolve().parent.parent
@@ -115,7 +116,7 @@ def get_company_name(symbol: str, workdir: Path) -> str:
 # Perplexity Query with Retry
 # ============================================================================
 
-def query_perplexity(prompt: str, max_tokens: int = 4000) -> Optional[str]:
+async def query_perplexity(prompt: str, max_tokens: int = 4000) -> Optional[str]:
     """
     Query Perplexity AI with retry logic and exponential backoff.
 
@@ -131,13 +132,13 @@ def query_perplexity(prompt: str, max_tokens: int = 4000) -> Optional[str]:
         logger.error("PERPLEXITY_API_KEY not found in environment")
         return None
 
-    client = OpenAI(api_key=api_key, base_url="https://api.perplexity.ai")
+    client = AsyncOpenAI(api_key=api_key, base_url="https://api.perplexity.ai")
 
     for attempt in range(MAX_RETRIES):
         try:
             logger.info("  Querying Perplexity (attempt %d/%d)...", attempt + 1, MAX_RETRIES)
 
-            response = client.chat.completions.create(
+            response = await client.chat.completions.create(
                 model=PERPLEXITY_MODEL,
                 messages=[
                     {
@@ -163,7 +164,7 @@ def query_perplexity(prompt: str, max_tokens: int = 4000) -> Optional[str]:
             if attempt < MAX_RETRIES - 1:
                 wait_time = (RETRY_BACKOFF_MULTIPLIER ** attempt) * RETRY_DELAY_SECONDS
                 logger.info("  Waiting %ss before retry...", wait_time)
-                time.sleep(wait_time)
+                await asyncio.sleep(wait_time)
             else:
                 logger.error("  All %d retry attempts failed", MAX_RETRIES)
                 return None
@@ -175,7 +176,7 @@ def query_perplexity(prompt: str, max_tokens: int = 4000) -> Optional[str]:
 # Business Model Analysis
 # ============================================================================
 
-def save_business_model_analysis(
+async def save_business_model_analysis(
     symbol: str,
     workdir: Path,
     company_identifier: str,
@@ -235,11 +236,11 @@ Structure your analysis with the following sections and depth:
 
 For each section, cite specific data points from recent earnings reports, SEC filings, or reputable financial sources. Include dates for all figures."""
 
-    result = query_perplexity(prompt, max_tokens=PERPLEXITY_MAX_TOKENS['business_model'])
+    result = await query_perplexity(prompt, max_tokens=PERPLEXITY_MAX_TOKENS['business_model'])
 
     if result:
         artifacts_dir = ensure_directory(workdir / 'artifacts')
-        output_path = artifacts_dir / 'perplexity_analysis_business_model.md'
+        output_path = artifacts_dir / 'business_model_analysis.md'
         with output_path.open('w') as f:
             f.write(f"# Business Model Analysis - {symbol}\n\n")
             f.write(f"*Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}*\n\n")
@@ -255,7 +256,7 @@ For each section, cite specific data points from recent earnings reports, SEC fi
 # Competitive Analysis
 # ============================================================================
 
-def save_competitive_analysis(
+async def save_competitive_analysis(
     symbol: str,
     workdir: Path,
     company_identifier: str,
@@ -317,11 +318,11 @@ Create a positioning matrix showing how the company and its competitors compare 
 
 Cite specific data points, dates, and sources throughout. Use the most recent available data."""
 
-    result = query_perplexity(prompt, max_tokens=PERPLEXITY_MAX_TOKENS['competitive'])
+    result = await query_perplexity(prompt, max_tokens=PERPLEXITY_MAX_TOKENS['competitive'])
 
     if result:
         artifacts_dir = ensure_directory(workdir / 'artifacts')
-        output_path = artifacts_dir / 'perplexity_analysis_competitive.md'
+        output_path = artifacts_dir / 'competitive_analysis.md'
         with output_path.open('w') as f:
             f.write(f"# Competitive Analysis - {symbol}\n\n")
             f.write(f"*Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}*\n\n")
@@ -337,7 +338,7 @@ Cite specific data points, dates, and sources throughout. Use the most recent av
 # Risk Analysis
 # ============================================================================
 
-def save_risk_analysis(
+async def save_risk_analysis(
     symbol: str,
     workdir: Path,
     company_identifier: str,
@@ -438,11 +439,11 @@ For each risk, you must include: (a) a clear description, (b) specific supportin
 
 Cite specific data points, regulatory filings, court documents, and recent news sources. Do not use vague or generic language — every risk should be supported by concrete evidence specific to {company_identifier}."""
 
-    result = query_perplexity(prompt, max_tokens=PERPLEXITY_MAX_TOKENS['risk'])
+    result = await query_perplexity(prompt, max_tokens=PERPLEXITY_MAX_TOKENS['risk'])
 
     if result:
         artifacts_dir = ensure_directory(workdir / 'artifacts')
-        output_path = artifacts_dir / 'perplexity_analysis_risk.md'
+        output_path = artifacts_dir / 'risk_analysis.md'
         with output_path.open('w') as f:
             f.write(f"# Risk Analysis - {symbol}\n\n")
             f.write(f"*Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}*\n\n")
@@ -458,7 +459,7 @@ Cite specific data points, regulatory filings, court documents, and recent news 
 # Investment Thesis
 # ============================================================================
 
-def save_investment_thesis(
+async def save_investment_thesis(
     symbol: str,
     workdir: Path,
     company_identifier: str,
@@ -535,11 +536,11 @@ Examples: customer churn rate exceeding X%, management guidance revision, regula
 
 Cite recent analyst reports, earnings transcripts, SEC filings, and financial data sources throughout. Use specific numbers, not vague qualitative assessments."""
 
-    result = query_perplexity(prompt, max_tokens=PERPLEXITY_MAX_TOKENS['thesis'])
+    result = await query_perplexity(prompt, max_tokens=PERPLEXITY_MAX_TOKENS['thesis'])
 
     if result:
         artifacts_dir = ensure_directory(workdir / 'artifacts')
-        output_path = artifacts_dir / 'perplexity_analysis_investment_thesis.md'
+        output_path = artifacts_dir / 'investment_thesis.md'
         with output_path.open('w') as f:
             f.write(f"# Investment Thesis - {symbol}\n\n")
             f.write(f"*Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}*\n\n")
@@ -555,9 +556,9 @@ Cite recent analyst reports, earnings transcripts, SEC filings, and financial da
 # Main Entry Point
 # ============================================================================
 
-def main() -> int:
+async def async_main() -> int:
     """
-    CLI entry point. Runs all four analysis queries sequentially.
+    CLI entry point. Runs all four analysis queries in parallel.
 
     Returns:
         Exit code: 0 (all 4 succeed), 1 (partial), 2 (nothing produced).
@@ -602,18 +603,28 @@ def main() -> int:
     logger.info("Work directory: %s", workdir)
     logger.info("=" * 60)
 
+    # Run all four analysis queries in parallel
+    bm_ok, comp_ok, risk_ok, inv_ok = await asyncio.gather(
+        save_business_model_analysis(symbol, workdir, company_identifier),
+        save_competitive_analysis(symbol, workdir, company_identifier),
+        save_risk_analysis(symbol, workdir, company_identifier),
+        save_investment_thesis(symbol, workdir, company_identifier),
+    )
+
     # Track results for each analysis
-    results = {}
+    results = {
+        'business_model': bm_ok,
+        'competitive': comp_ok,
+        'risk': risk_ok,
+        'investment': inv_ok,
+    }
     artifacts = []
     failed_names = []
 
-    # ---- Task 1: Business Model Analysis ----
-    logger.info("\n[1/4] Business Model Analysis")
-    results['business_model'] = save_business_model_analysis(symbol, workdir, company_identifier)
     if results['business_model']:
         artifacts.append({
             "name": "business_model",
-            "path": "artifacts/perplexity_analysis_business_model.md",
+            "path": "artifacts/business_model_analysis.md",
             "format": "md",
             "source": "perplexity",
             "summary": "Revenue segments, unit economics, competitive moat",
@@ -621,13 +632,10 @@ def main() -> int:
     else:
         failed_names.append("business_model")
 
-    # ---- Task 2: Competitive Analysis ----
-    logger.info("\n[2/4] Competitive Analysis")
-    results['competitive'] = save_competitive_analysis(symbol, workdir, company_identifier)
     if results['competitive']:
         artifacts.append({
             "name": "competitive",
-            "path": "artifacts/perplexity_analysis_competitive.md",
+            "path": "artifacts/competitive_analysis.md",
             "format": "md",
             "source": "perplexity",
             "summary": "Market share, competitors, positioning",
@@ -635,13 +643,10 @@ def main() -> int:
     else:
         failed_names.append("competitive")
 
-    # ---- Task 3: Risk Analysis ----
-    logger.info("\n[3/4] Risk Analysis")
-    results['risk'] = save_risk_analysis(symbol, workdir, company_identifier)
     if results['risk']:
         artifacts.append({
             "name": "risk",
-            "path": "artifacts/perplexity_analysis_risk.md",
+            "path": "artifacts/risk_analysis.md",
             "format": "md",
             "source": "perplexity",
             "summary": "Risks across 4 categories with specific data",
@@ -649,13 +654,10 @@ def main() -> int:
     else:
         failed_names.append("risk")
 
-    # ---- Task 4: Investment Thesis ----
-    logger.info("\n[4/4] Investment Thesis")
-    results['investment'] = save_investment_thesis(symbol, workdir, company_identifier)
     if results['investment']:
         artifacts.append({
             "name": "investment",
-            "path": "artifacts/perplexity_analysis_investment_thesis.md",
+            "path": "artifacts/investment_thesis.md",
             "format": "md",
             "source": "perplexity",
             "summary": "Bull/bear/base cases, SWOT, catalysts",
@@ -696,6 +698,10 @@ def main() -> int:
     print(json.dumps(manifest, indent=2))
 
     return exit_code
+
+
+def main() -> int:
+    return asyncio.run(async_main())
 
 
 if __name__ == '__main__':

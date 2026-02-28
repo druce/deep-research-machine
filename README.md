@@ -10,31 +10,44 @@ An async Python-orchestrated equity research pipeline that generates comprehensi
 
 This triggers a 14-task pipeline:
 
+```mermaid
+flowchart TD
+    profile["profile\n(company identity & peers)"]
+    fetch["fetch data\n(technical, fundamental,\nperplexity, edgar,\nwikipedia, perplexity_analysis)"]
+    write_body["write_body\n(Claude: 7-section report)"]
+    write_conclusion["write_conclusion\n(Claude: concluding analysis)"]
+    write_intro["write_intro\n(Claude: intro paragraph)"]
+    assemble["assemble_text\n(Jinja2: combine sections)"]
+    critique["critique_body_final\n(Claude: editorial review)"]
+    polish["polish_body_final\n(Claude: revise per critique)"]
+    final["final_assembly\n(Jinja2 + pandoc → md/html/pdf)"]
+
+    profile --> fetch
+    fetch --> write_body
+    write_body --> write_conclusion
+    write_body --> write_intro
+    write_conclusion --> write_intro
+    write_intro --> assemble
+    assemble --> critique
+    critique --> polish
+    polish --> final
+
+    style profile fill:#e1f5fe
+    style fetch fill:#e1f5fe
+    style write_body fill:#fff3e0
+    style write_conclusion fill:#fff3e0
+    style write_intro fill:#fff3e0
+    style critique fill:#fff3e0
+    style polish fill:#fff3e0
+    style assemble fill:#e8f5e9
+    style final fill:#e8f5e9
 ```
-profile ─────┬── technical
-             ├── fundamental
-             ├── perplexity           ──┐
-             ├── fetch_edgar              ├── write_body ── write_conclusion ── write_intro
-             ├── wikipedia             ──┘           │
-             └── perplexity_analysis                 │
-                                                     ▼
-                                              assemble_text
-                                                     │
-                                            critique_body_final
-                                                     │
-                                            polish_body_final
-                                                     │
-                                              final_assembly
-                                                     │
-                                                     ▼
-                                         artifacts/final_report.md
-```
 
-**Phase 1 — Data gathering** (parallel): Profile, technicals, fundamentals, Perplexity research, SEC filings, Wikipedia, competitive analysis.
+**Phase 1 — Data gathering** (parallel, blue): Profile fetches company identity, then 6 data tasks run concurrently — technicals, fundamentals, Perplexity research, SEC filings, Wikipedia, competitive analysis.
 
-**Phase 2 — Writing** (sequential): A Claude subagent synthesizes all gathered data into a 7-section report body, then conclusion and intro are written.
+**Phase 2 — Writing** (sequential, orange): Claude subagents synthesize all gathered data into a 7-section report body, then conclusion and intro are written. An editor agent critiques and a revision agent polishes.
 
-**Phase 3 — Assembly & polish**: Sections are concatenated via Jinja2, critiqued by an editor agent, revised, then assembled into the final formatted report with charts and tables.
+**Phase 3 — Assembly** (green): Sections are concatenated via Jinja2, then the final report is assembled with charts and tables and converted to markdown, HTML, and PDF via pandoc.
 
 ## Architecture
 

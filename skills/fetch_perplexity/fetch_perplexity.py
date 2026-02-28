@@ -21,6 +21,7 @@ Python packages: openai, yfinance, python-dotenv
 """
 
 import argparse
+import asyncio
 import json
 import os
 import sys
@@ -28,7 +29,7 @@ import time
 from pathlib import Path
 from typing import Optional
 
-from openai import OpenAI
+from openai import AsyncOpenAI
 
 # Add skills directory to path for local imports
 _SKILLS_DIR = Path(__file__).resolve().parent.parent
@@ -107,7 +108,7 @@ def get_company_name(symbol: str, workdir: str) -> str:
 # Perplexity API query
 # ============================================================================
 
-def query_perplexity(
+async def query_perplexity(
     prompt: str,
     model: str = PERPLEXITY_MODEL,
     temperature: float = PERPLEXITY_TEMPERATURE,
@@ -115,7 +116,7 @@ def query_perplexity(
     max_retries: int = MAX_RETRIES,
 ) -> Optional[str]:
     """
-    Query Perplexity AI using the OpenAI-compatible client.
+    Query Perplexity AI using the async OpenAI-compatible client.
 
     Implements exponential backoff retry on failure.
 
@@ -134,7 +135,7 @@ def query_perplexity(
         logger.error("PERPLEXITY_API_KEY not set")
         return None
 
-    client = OpenAI(api_key=api_key, base_url="https://api.perplexity.ai")
+    client = AsyncOpenAI(api_key=api_key, base_url="https://api.perplexity.ai")
 
     delay = RETRY_DELAY_SECONDS
     for attempt in range(1, max_retries + 1):
@@ -142,7 +143,7 @@ def query_perplexity(
             logger.info("  Perplexity query attempt %d/%d (model=%s, max_tokens=%d)",
                         attempt, max_retries, model, max_tokens)
 
-            response = client.chat.completions.create(
+            response = await client.chat.completions.create(
                 model=model,
                 messages=[
                     {
@@ -171,7 +172,7 @@ def query_perplexity(
             logger.error("  Attempt %d failed: %s", attempt, e)
             if attempt < max_retries:
                 logger.info("  Retrying in %ss...", delay)
-                time.sleep(delay)
+                await asyncio.sleep(delay)
                 delay *= RETRY_BACKOFF_MULTIPLIER
 
     logger.error("  All retry attempts exhausted")
@@ -182,7 +183,7 @@ def query_perplexity(
 # Research sections
 # ============================================================================
 
-def save_news_research(symbol: str, workdir: str, company_identifier: str) -> bool:
+async def save_news_research(symbol: str, workdir: str, company_identifier: str) -> bool:
     """
     Query Perplexity for major news stories and save to Markdown.
 
@@ -217,7 +218,7 @@ def save_news_research(symbol: str, workdir: str, company_identifier: str) -> bo
         f"Use Markdown formatting with headers for each story."
     )
 
-    content = query_perplexity(
+    content = await query_perplexity(
         prompt,
         max_tokens=PERPLEXITY_MAX_TOKENS.get("news_stories", 4000),
     )
@@ -227,7 +228,7 @@ def save_news_research(symbol: str, workdir: str, company_identifier: str) -> bo
         return False
 
     output_dir = ensure_directory(Path(workdir) / "artifacts")
-    output_path = output_dir / "perplexity_news_stories.md"
+    output_path = output_dir / "news_stories.md"
 
     header = (
         f"# Major News Stories: {company_identifier} ({symbol})\n\n"
@@ -242,7 +243,7 @@ def save_news_research(symbol: str, workdir: str, company_identifier: str) -> bo
     return True
 
 
-def save_business_profile(symbol: str, workdir: str, company_identifier: str) -> bool:
+async def save_business_profile(symbol: str, workdir: str, company_identifier: str) -> bool:
     """
     Query Perplexity for a 10-section business profile and save to Markdown.
 
@@ -291,7 +292,7 @@ def save_business_profile(symbol: str, workdir: str, company_identifier: str) ->
         f"Use Markdown formatting with clear section headers."
     )
 
-    content = query_perplexity(
+    content = await query_perplexity(
         prompt,
         max_tokens=PERPLEXITY_MAX_TOKENS.get("business_profile", 8000),
     )
@@ -301,7 +302,7 @@ def save_business_profile(symbol: str, workdir: str, company_identifier: str) ->
         return False
 
     output_dir = ensure_directory(Path(workdir) / "artifacts")
-    output_path = output_dir / "perplexity_business_profile.md"
+    output_path = output_dir / "business_profile.md"
 
     header = (
         f"# Business Profile: {company_identifier} ({symbol})\n\n"
@@ -315,7 +316,7 @@ def save_business_profile(symbol: str, workdir: str, company_identifier: str) ->
     return True
 
 
-def save_executive_profiles(symbol: str, workdir: str, company_identifier: str) -> bool:
+async def save_executive_profiles(symbol: str, workdir: str, company_identifier: str) -> bool:
     """
     Query Perplexity for C-suite executive profiles and save to Markdown.
 
@@ -352,7 +353,7 @@ def save_executive_profiles(symbol: str, workdir: str, company_identifier: str) 
         f"Use Markdown formatting with a clear header for each executive."
     )
 
-    content = query_perplexity(
+    content = await query_perplexity(
         prompt,
         max_tokens=PERPLEXITY_MAX_TOKENS.get("executive_profiles", 4000),
     )
@@ -362,7 +363,7 @@ def save_executive_profiles(symbol: str, workdir: str, company_identifier: str) 
         return False
 
     output_dir = ensure_directory(Path(workdir) / "artifacts")
-    output_path = output_dir / "perplexity_executive_profiles.md"
+    output_path = output_dir / "executive_profiles.md"
 
     header = (
         f"# Executive Profiles: {company_identifier} ({symbol})\n\n"
@@ -380,7 +381,7 @@ def save_executive_profiles(symbol: str, workdir: str, company_identifier: str) 
 # Main
 # ============================================================================
 
-def main() -> int:
+async def async_main() -> int:
     parser = argparse.ArgumentParser(
         description="Perplexity AI research: news, business profile, executive profiles"
     )
@@ -416,11 +417,17 @@ def main() -> int:
     company_identifier = get_company_name(symbol, workdir)
     logger.info("Company identifier: %s", company_identifier)
 
-    # Run all three research sections
-    results = {}
-    results["news_stories"] = save_news_research(symbol, workdir, company_identifier)
-    results["business_profile"] = save_business_profile(symbol, workdir, company_identifier)
-    results["executive_profiles"] = save_executive_profiles(symbol, workdir, company_identifier)
+    # Run all three research sections in parallel
+    news_ok, profile_ok, exec_ok = await asyncio.gather(
+        save_news_research(symbol, workdir, company_identifier),
+        save_business_profile(symbol, workdir, company_identifier),
+        save_executive_profiles(symbol, workdir, company_identifier),
+    )
+    results = {
+        "news_stories": news_ok,
+        "business_profile": profile_ok,
+        "executive_profiles": exec_ok,
+    }
 
     # Build manifest
     succeeded = sum(1 for v in results.values() if v)
@@ -432,7 +439,7 @@ def main() -> int:
     if results["news_stories"]:
         artifacts.append({
             "name": "news_stories",
-            "path": "artifacts/perplexity_news_stories.md",
+            "path": "artifacts/news_stories.md",
             "format": "md",
             "source": "perplexity",
             "summary": f"{NEWS_STORIES_COUNT} major news stories since {NEWS_STORIES_SINCE}",
@@ -440,7 +447,7 @@ def main() -> int:
     if results["business_profile"]:
         artifacts.append({
             "name": "business_profile",
-            "path": "artifacts/perplexity_business_profile.md",
+            "path": "artifacts/business_profile.md",
             "format": "md",
             "source": "perplexity",
             "summary": "10-section business profile",
@@ -448,7 +455,7 @@ def main() -> int:
     if results["executive_profiles"]:
         artifacts.append({
             "name": "executive_profiles",
-            "path": "artifacts/perplexity_executive_profiles.md",
+            "path": "artifacts/executive_profiles.md",
             "format": "md",
             "source": "perplexity",
             "summary": "CEO, CFO, COO profiles with compensation",
@@ -484,6 +491,10 @@ def main() -> int:
     else:
         logger.error("All research sections failed")
         return 2
+
+
+def main() -> int:
+    return asyncio.run(async_main())
 
 
 if __name__ == "__main__":

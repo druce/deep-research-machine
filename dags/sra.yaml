@@ -4,7 +4,7 @@ dag:
   inputs:
     ticker: "${ticker}"
     workdir: "${workdir}"
-  root_dir: /Users/drucev/projects/sra2
+  root_dir: /Users/drucev/projects/sra3
   template_dir: templates
 
 tasks:
@@ -94,7 +94,8 @@ tasks:
         ticker: "${ticker}"
         workdir: "${workdir}"
     outputs:
-      wikipedia_summary: {path: "artifacts/wikipedia_summary.txt", format: txt, description: "Full Wikipedia article text providing company history, operations, and public background"}
+      wikipedia_summary: {path: "artifacts/wikipedia_summary.txt", format: txt, description: "Wikipedia article summary providing company history, operations, and public background"}
+      wikipedia_full:    {path: "artifacts/wikipedia_full.txt", format: txt, description: "Full Wikipedia article text with complete detail on company history, operations, and background"}
 
   perplexity_analysis:
     description: Generate business model, competitive, risk, and investment analysis via Perplexity
@@ -124,9 +125,9 @@ tasks:
 
         You also have access to powerful financial research tools through MCP servers. Use these tools to:
         - Fill gaps in the provided research
-        - Verify critical facts and figures
         - Find recent developments not covered in the report
         - Gather additional market data and competitive intelligence
+        - The provided artifacts are up to date, you do not need to verify them unless there is contradictory information
 
         Perform deep research on ${ticker} using the collected information and anything you can find with tools. Search the web extensively, synthesize findings, and write a comprehensive report.
 
@@ -242,14 +243,14 @@ tasks:
       system: "You are a senior equity research editor with expertise in financial analysis and report quality."
       disallowed_tools: [yfinance, alphavantage, brave-search, perplexity-ask, wikipedia, playwright, fetch, filesystem]
       prompt: |
-        Read the assembled report at artifacts/report_body.md carefully and provide a detailed critique.
+        Read the assembled report text at artifacts/report_body.md carefully and provide a detailed critique.
 
         Evaluate the report for:
         - Clarity and readability
         - Repetition; For instance, early summary sections can refer to supply chain issues but should not go into details if this is discussed comprehensively later.
         - Factual accuracy and consistency
         - Missing or incomplete analysis
-        - Logical flow and structure
+        - Logical flow
         - Data quality and sourcing
         - Professional tone and formatting
         - Unsupported claims or speculation
@@ -270,7 +271,7 @@ tasks:
       system: "You are a senior equity research analyst revising a report based on editorial feedback."
       disallowed_tools: [yfinance, alphavantage, brave-search, perplexity-ask, wikipedia, playwright, fetch, filesystem]
       prompt: |
-        Read the critique at artifacts/report_critique.md and the current report at artifacts/report_body.md.
+        Read the critique at artifacts/report_critique.md and the current report text at artifacts/report_body.md.
 
         Carefully address each issue identified in the critique:
         - Improve clarity and readability
@@ -281,6 +282,11 @@ tasks:
         - Enhance data quality and sourcing citations
         - Ensure professional tone and formatting
         - Remove or substantiate any unsupported claims using provided artifacts.
+
+        Do not introduce new information or conduct new research. Resolve using the provided artifacts.. If there is a contradiction between the critique and the artifacts, trust the artifacts. If there is a contradictin between artifacts, note the contradiction.
+
+        IMPORTANT:
+          - this report will be assembled with a header including title, charts, technical analysis, peer comparison table. Return only the body text starting at section 1, Introduction, without any title or header.
 
         Save the revised report to artifacts/report_body_final.md.
     outputs:

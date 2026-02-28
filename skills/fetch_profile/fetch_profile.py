@@ -504,6 +504,192 @@ Respond with valid JSON only (no markdown, no code fences). Use this exact schem
         return None, None
 
 
+def suggest_and_select_peers(
+    symbol: str,
+    company_name: str,
+    industry: str,
+    market_cap: Optional[int],
+    peers_data: Dict,
+    max_peers: int = 5,
+) -> Tuple[Optional[Dict], Optional[str]]:
+    """
+    Ask Claude to suggest additional peers, then select the top N most comparable.
+
+    Takes the current (filtered) peer list, asks Claude to suggest missing peers,
+    enriches any new suggestions via yfinance, then asks Claude to rank and pick
+    the best `max_peers` from the combined list.
+
+    Args:
+        symbol: Target company ticker.
+        company_name: Target company name.
+        industry: Target company industry.
+        market_cap: Target company market cap (for size comparison).
+        peers_data: Current peers dict in list-of-lists format.
+        max_peers: Maximum peers to return (default 5).
+
+    Returns:
+        Tuple of (selected_peers_dict_or_None, rationale_or_None).
+    """
+    api_key = os.getenv('ANTHROPIC_API_KEY')
+    if not api_key:
+        logger.warning("ANTHROPIC_API_KEY not set — skipping peer suggestion")
+        return None, None
+
+    current_symbols = peers_data.get('symbol', [])
+    peer_count = len(current_symbols)
+
+    logger.info(f"Asking Claude to suggest additional peers beyond {peer_count} current...")
+
+    try:
+        import anthropic
+        client = anthropic.Anthropic(api_key=api_key)
+
+        # Build current peer list for context
+        peer_lines = []
+        for i in range(peer_count):
+            sym = current_symbols[i]
+            name = peers_data['name'][i] if i < len(peers_data.get('name', [])) else sym
+            mcap = peers_data['market_cap'][i] if i < len(peers_data.get('market_cap', [])) else None
+            mcap_str = format_currency(mcap) if mcap else "N/A"
+            peer_lines.append(f"- {sym}: {name} (market cap: {mcap_str})")
+        peers_text = "\n".join(peer_lines) if peer_lines else "(none)"
+
+        mcap_str = format_currency(market_cap) if market_cap else "N/A"
+
+        # Step 1: Ask Claude to suggest additional peers
+        suggest_prompt = f"""You are a financial analyst identifying peer companies for equity research.
+
+Target company:
+- Symbol: {symbol}
+- Name: {company_name}
+- Industry: {industry}
+- Market cap: {mcap_str}
+
+Current peer list:
+{peers_text}
+
+Suggest up to 5 additional publicly traded US peers NOT already in the list above. Focus on companies that:
+1. Compete directly or operate in the same industry segment
+2. Have comparable business models and revenue mix
+3. Are of similar scale (market cap within roughly 0.2x to 5x)
+
+Respond with valid JSON only (no markdown, no code fences):
+{{"suggestions": ["SYM1", "SYM2", ...], "reasoning": "brief explanation"}}
+
+If the current list is already comprehensive, return {{"suggestions": [], "reasoning": "..."}}.
+"""
+
+        response = client.messages.create(
+            model=CLAUDE_MODEL,
+            max_tokens=1000,
+            messages=[{"role": "user", "content": suggest_prompt}],
+        )
+
+        response_text = response.content[0].text.strip()
+        if response_text.startswith('```'):
+            lines = response_text.split('\n')
+            lines = [l for l in lines if not l.strip().startswith('```')]
+            response_text = '\n'.join(lines)
+
+        suggest_result = json.loads(response_text)
+        new_symbols = suggest_result.get('suggestions', [])
+        # Filter out any that are already in the list or are the target
+        new_symbols = [s for s in new_symbols if s not in current_symbols and s != symbol]
+
+        if new_symbols:
+            logger.info(f"Claude suggested {len(new_symbols)} additional peers: {', '.join(new_symbols)}")
+            # Enrich new suggestions with yfinance
+            new_data = _enrich_peers_with_yfinance(new_symbols)
+            # Merge into combined list
+            combined = {
+                "symbol": list(current_symbols) + new_data['symbol'],
+                "name": list(peers_data.get('name', [])) + new_data['name'],
+                "price": list(peers_data.get('price', [])) + new_data['price'],
+                "market_cap": list(peers_data.get('market_cap', [])) + new_data['market_cap'],
+            }
+        else:
+            logger.info("Claude had no additional peer suggestions")
+            combined = peers_data
+
+        combined_count = len(combined['symbol'])
+        if combined_count <= max_peers:
+            logger.info(f"Combined list has {combined_count} peers (within limit of {max_peers})")
+            return combined, f"Kept all {combined_count} peers (within limit)"
+
+        # Step 2: Ask Claude to rank and select top N
+        rank_lines = []
+        for i in range(combined_count):
+            sym = combined['symbol'][i]
+            name = combined['name'][i] if i < len(combined.get('name', [])) else sym
+            mcap = combined['market_cap'][i] if i < len(combined.get('market_cap', [])) else None
+            mcap_str = format_currency(mcap) if mcap else "N/A"
+            rank_lines.append(f"- {sym}: {name} (market cap: {mcap_str})")
+        combined_text = "\n".join(rank_lines)
+
+        select_prompt = f"""You are a financial analyst selecting the most comparable peer companies for equity research.
+
+Target company:
+- Symbol: {symbol}
+- Name: {company_name}
+- Industry: {industry}
+- Market cap: {format_currency(market_cap) if market_cap else 'N/A'}
+
+Candidate peers:
+{combined_text}
+
+Select exactly {max_peers} peers that are the MOST comparable to {symbol} for equity research. Prioritize:
+1. Direct competitors in the same business segment
+2. Similar business model and revenue mix
+3. Comparable market cap and scale
+4. Companies that analysts typically compare with {symbol}
+
+Respond with valid JSON only (no markdown, no code fences):
+{{"selected": ["SYM1", "SYM2", ...], "rationale": "brief explanation of selections"}}
+"""
+
+        response = client.messages.create(
+            model=CLAUDE_MODEL,
+            max_tokens=1000,
+            messages=[{"role": "user", "content": select_prompt}],
+        )
+
+        response_text = response.content[0].text.strip()
+        if response_text.startswith('```'):
+            lines = response_text.split('\n')
+            lines = [l for l in lines if not l.strip().startswith('```')]
+            response_text = '\n'.join(lines)
+
+        select_result = json.loads(response_text)
+        selected_symbols = select_result.get('selected', [])[:max_peers]
+
+        if not selected_symbols:
+            logger.warning("Claude returned empty selection — keeping combined list trimmed")
+            selected_symbols = combined['symbol'][:max_peers]
+
+        # Build final peers data preserving order from selection
+        selected_set = set(selected_symbols)
+        final = {"symbol": [], "name": [], "price": [], "market_cap": []}
+        for sym in selected_symbols:
+            for i in range(combined_count):
+                if combined['symbol'][i] == sym:
+                    final['symbol'].append(sym)
+                    final['name'].append(combined['name'][i] if i < len(combined.get('name', [])) else sym)
+                    final['price'].append(combined['price'][i] if i < len(combined.get('price', [])) else None)
+                    final['market_cap'].append(combined['market_cap'][i] if i < len(combined.get('market_cap', [])) else None)
+                    break
+
+        rationale = select_result.get('rationale', f"Selected top {max_peers} from {combined_count} candidates")
+        logger.info(f"Final peer selection: {combined_count} -> {len(final['symbol'])} peers")
+        return final, rationale
+
+    except json.JSONDecodeError as e:
+        logger.error(f"Failed to parse Claude response in peer suggestion: {e}")
+        return None, None
+    except Exception as e:
+        logger.error(f"Claude peer suggestion/selection failed: {e}")
+        return None, None
+
+
 # ============================================================================
 # Main Entry Point
 # ============================================================================
@@ -634,6 +820,27 @@ def main() -> int:
             filtered_peers['filter_rationale'] = filter_rationale
             peers_data = filtered_peers
         # If filtering returned None, keep the original unfiltered peers_data
+
+    # ---- Step 3b: Suggest additional peers and select top 5 ----
+    if (
+        peers_data
+        and not args.no_filter_peers
+        and profile_ok
+        and profile_data
+    ):
+        selected_peers, select_rationale = suggest_and_select_peers(
+            symbol,
+            profile_data.get('company_name', symbol),
+            profile_data.get('industry', 'N/A'),
+            profile_data.get('market_cap'),
+            peers_data,
+            max_peers=5,
+        )
+        if selected_peers is not None:
+            selected_peers['provider'] = peers_data.get('provider', 'unknown')
+            selected_peers['filtered'] = True
+            selected_peers['filter_rationale'] = select_rationale
+            peers_data = selected_peers
 
     # ---- Step 4: Save Peers ----
     if peers_data:

@@ -38,7 +38,8 @@ async def run_db(*args: str) -> dict:
     stdout, stderr = await proc.communicate()
     if proc.returncode != 0:
         err = stderr.decode().strip() or stdout.decode().strip()
-        raise RuntimeError(f"db.py {args[0]} failed (rc={proc.returncode}): {err}")
+        raise RuntimeError(
+            f"db.py {args[0]} failed (rc={proc.returncode}): {err}")
     return json.loads(stdout.decode())
 
 
@@ -139,9 +140,9 @@ async def run_claude_task(task: dict, workdir: Path) -> dict:
         parts.append(params["system"])
         parts.append("")
 
-    parts.append(f"Working directory: {abs_workdir}")
     parts.append("All research data is in the artifacts/ subdirectory.")
-    parts.append("Read artifacts/manifest.json for a description of all available files.")
+    parts.append(
+        "Read artifacts/manifest.json for a description of all available files.")
     parts.append("")
     parts.append("---")
     parts.append("")
@@ -153,16 +154,18 @@ async def run_claude_task(task: dict, workdir: Path) -> dict:
         out_path = out_def["path"]
         if out_path not in params["prompt"]:
             parts.append("")
-            parts.append(f'Save your output for "{out_name}" to {abs_workdir}/{out_path}')
+            parts.append(f'Save your output for "{out_name}" to {out_path}')
 
     prompt = "\n".join(parts)
 
     # Build claude command
-    cmd = ["claude", "--dangerously-skip-permissions", "--verbose", "-p"]
+    cmd = ["claude", "--dangerously-skip-permissions", "--verbose",
+           "--output-format", "stream-json",
+           "-d", abs_workdir, "-p"]
 
     disallowed = params.get("disallowed_tools", [])
     if disallowed:
-        cmd.extend(["--disallowed-tools"] + disallowed)
+        cmd.extend(["--disallowedTools", ",".join(disallowed)])
 
     if params.get("model"):
         cmd.extend(["--model", params["model"]])
@@ -175,24 +178,87 @@ async def run_claude_task(task: dict, workdir: Path) -> dict:
     env = {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
 
     stderr_log = workdir / f"{task['id']}_stderr.log"
-    log(f"  [{task['id']}] Running claude task")
+    log(f"  [{task['id']}] Running: {' '.join(cmd)}")
+    log(f"  [{task['id']}] Prompt file: {prompt_file}")
 
-    with open(stderr_log, "w") as err_f:
+    tools_log_path = workdir / "tools.log"
+    with open(stderr_log, "w") as err_f, open(tools_log_path, "a") as tools_log:
         proc = await asyncio.create_subprocess_exec(
             *cmd,
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=err_f,
             env=env,
+            cwd=abs_workdir,
+            limit=10 * 1024 * 1024,  # 10MB buffer for large JSON lines
         )
-        stdout_bytes, _ = await proc.communicate(input=prompt.encode())
+        # Write prompt to stdin and close
+        proc.stdin.write(prompt.encode())
+        await proc.stdin.drain()
+        proc.stdin.close()
 
-    # Check if expected output files were produced
+        # Stream and parse JSON output
+        try:
+            async for line_bytes in proc.stdout:
+                try:
+                    line = line_bytes.decode().strip()
+                    if not line:
+                        continue
+                    msg = json.loads(line)
+                    msg_type = msg.get("type")
+
+                    # Extract content blocks from any message type
+                    content = []
+                    if msg_type == "assistant":
+                        content = msg.get("message", {}).get("content", [])
+                    elif msg_type == "user":
+                        content = msg.get("message", {}).get("content", [])
+                    if not isinstance(content, list):
+                        content = []
+
+                    for item in content:
+                        item_type = item.get("type")
+                        if item_type == "text":
+                            log(f"[{task['id']}] text: {item['text']}", flush=True)
+                        elif item_type == "thinking":
+                            log(f"[{task['id']}] thinking: {item['thinking']}", flush=True)
+                        elif item_type == "tool_use":
+                            entry = {
+                                "event": "PreToolUse",
+                                "task": task["id"],
+                                "tool": item.get("name"),
+                                "input": item.get("input"),
+                            }
+                            tools_log.write(json.dumps(entry) + "\n")
+                            tools_log.flush()
+                        elif item_type == "tool_result":
+                            output = item.get("content", "")
+                            if isinstance(output, str) and len(output) > 2000:
+                                output = output[:2000] + "...(truncated)"
+                            entry = {
+                                "event": "PostToolUse",
+                                "task": task["id"],
+                                "tool_use_id": item.get("tool_use_id"),
+                                "output": output,
+                            }
+                            tools_log.write(json.dumps(entry) + "\n")
+                            tools_log.flush()
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+        await proc.wait()
+
+    # Check if expected output files were produced (exist and non-empty)
     missing = []
+    empty = []
     for out_name, out_def in outputs.items():
         out_path = workdir / out_def["path"]
         if not out_path.exists():
             missing.append(out_def["path"])
+        elif out_path.stat().st_size == 0:
+            empty.append(out_def["path"])
 
     if missing:
         return {
@@ -203,14 +269,22 @@ async def run_claude_task(task: dict, workdir: Path) -> dict:
             "manifest": None,
         }
 
+    if empty:
+        log(f"  [{task['id']}] Warning: empty output files: {', '.join(empty)}")
+
+    # Only include artifacts for files that exist and are non-empty
+    artifacts = []
+    for name, odef in outputs.items():
+        out_path = workdir / odef["path"]
+        if out_path.exists() and out_path.stat().st_size > 0:
+            artifacts.append(
+                {"name": name, "path": odef["path"], "format": odef["format"]})
+
     return {
         "task_id": task["id"],
         "status": "complete",
         "error": None,
-        "artifacts": [
-            {"name": name, "path": odef["path"], "format": odef["format"]}
-            for name, odef in outputs.items()
-        ],
+        "artifacts": artifacts,
         "manifest": None,
     }
 
@@ -248,8 +322,15 @@ async def process_results(results: list[dict], workdir: Path, tasks: list[dict])
         if result["status"] == "complete":
             completed += 1
 
-            # Register artifacts
+            # Register artifacts (skip missing or empty files)
             for artifact in result["artifacts"]:
+                artifact_file = workdir / artifact["path"]
+                if not artifact_file.exists():
+                    log(f"  [{task_id}] Skipping artifact '{artifact.get('name')}': file not found at {artifact['path']}")
+                    continue
+                if artifact_file.stat().st_size == 0:
+                    log(f"  [{task_id}] Skipping artifact '{artifact.get('name')}': file is empty at {artifact['path']}")
+                    continue
                 try:
                     add_args = [
                         "artifact-add", "--workdir", str(workdir),
@@ -264,7 +345,8 @@ async def process_results(results: list[dict], workdir: Path, tasks: list[dict])
                         add_args.extend(["--summary", artifact["summary"]])
                     await run_db(*add_args)
                 except RuntimeError as e:
-                    log(f"  Warning: artifact-add failed for {task_id}/{artifact.get('name')}: {e}")
+                    log(
+                        f"  Warning: artifact-add failed for {task_id}/{artifact.get('name')}: {e}")
 
             # Extract sets_vars
             sets_vars = params.get("sets_vars", {})
@@ -321,13 +403,57 @@ async def init_pipeline(ticker: str, dag: str, date: str) -> Path:
     return workdir
 
 
+async def resume_pipeline(ticker: str, date: str) -> Path:
+    """Resume an existing pipeline run. Reset interrupted tasks and continue."""
+    workdir = Path("work") / f"{ticker}_{date}"
+    db_path = workdir / "research.db"
+    if not db_path.exists():
+        raise RuntimeError(
+            f"No existing run found at {workdir} — cannot resume")
+
+    # Reset any tasks stuck in 'running' (interrupted) back to 'pending'
+    import sqlite3
+    conn = sqlite3.connect(str(db_path))
+    conn.row_factory = sqlite3.Row
+    stuck = conn.execute(
+        "SELECT id FROM tasks WHERE status = 'running'").fetchall()
+    if stuck:
+        stuck_ids = [r["id"] for r in stuck]
+        log(f"Resetting {len(stuck_ids)} interrupted tasks to pending: {', '.join(stuck_ids)}")
+        conn.execute(
+            "UPDATE tasks SET status = 'pending' WHERE status = 'running'")
+        conn.commit()
+    conn.close()
+
+    # Mark research as running
+    await run_db("research-update", "--workdir", str(workdir), "--status", "running")
+
+    # Show current status
+    status = await run_db("status", "--workdir", str(workdir))
+    task_counts = status.get("tasks", {})
+    log(f"Resuming: {task_counts.get('complete', 0)} complete, "
+        f"{task_counts.get('pending', 0)} pending, "
+        f"{task_counts.get('failed', 0)} failed")
+
+    return workdir
+
+
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run equity research DAG pipeline")
+    parser = argparse.ArgumentParser(
+        description="Run equity research DAG pipeline")
     parser.add_argument("ticker", help="Stock ticker symbol (e.g. AAPL)")
     parser.add_argument("--dag", default="dags/sra.yaml", help="DAG YAML file")
     parser.add_argument(
         "--date", default=datetime.now().strftime("%Y%m%d"),
         help="Date string YYYYMMDD (default: today)",
+    )
+    parser.add_argument(
+        "--resume", action="store_true",
+        help="Resume an existing run (skip init, reset interrupted tasks)",
+    )
+    parser.add_argument(
+        "--retry-failed", action="store_true",
+        help="When resuming, also retry previously failed tasks",
     )
     return parser.parse_args()
 
@@ -336,13 +462,34 @@ async def main() -> int:
     args = parse_args()
     ticker = args.ticker.upper()
 
-    log(f"Starting research pipeline for {ticker}")
+    if args.resume:
+        log(f"Resuming research pipeline for {ticker}")
+        try:
+            workdir = await resume_pipeline(ticker, args.date)
+        except RuntimeError as e:
+            log(f"Resume failed: {e}")
+            return 1
 
-    try:
-        workdir = await init_pipeline(ticker, args.dag, args.date)
-    except RuntimeError as e:
-        log(f"Initialization failed: {e}")
-        return 1
+        if args.retry_failed:
+            import sqlite3
+            db_path = workdir / "research.db"
+            conn = sqlite3.connect(str(db_path))
+            failed = conn.execute(
+                "SELECT id FROM tasks WHERE status = 'failed'").fetchall()
+            if failed:
+                failed_ids = [r["id"] for r in failed]
+                log(f"Retrying {len(failed_ids)} failed tasks: {', '.join(failed_ids)}")
+                conn.execute(
+                    "UPDATE tasks SET status = 'pending', error = NULL WHERE status = 'failed'")
+                conn.commit()
+            conn.close()
+    else:
+        log(f"Starting research pipeline for {ticker}")
+        try:
+            workdir = await init_pipeline(ticker, args.dag, args.date)
+        except RuntimeError as e:
+            log(f"Initialization failed: {e}")
+            return 1
 
     log(f"Workdir: {workdir}")
 

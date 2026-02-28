@@ -181,7 +181,7 @@ def get_filing_index(
         # Sort by filing_date descending
         filings_list.sort(key=lambda x: x["filing_date"], reverse=True)
 
-        out_path = artifacts_dir / "sec_filings_index.json"
+        out_path = artifacts_dir / "filings_index.json"
         with open(out_path, "w") as f:
             json.dump(filings_list, f, indent=2)
 
@@ -655,7 +655,7 @@ def get_recent_8k(
                 logger.warning("Error processing 8-K entry: %s", entry_exc)
                 continue
 
-        out_path = artifacts_dir / "sec_8k_summary.json"
+        out_path = artifacts_dir / "8k_summary.json"
         with open(out_path, "w") as f:
             json.dump(summaries, f, indent=2)
 
@@ -739,7 +739,7 @@ def main() -> int:
         success_steps += 1
         artifacts.append({
             "name": "filings_index",
-            "path": "artifacts/sec_filings_index.json",
+            "path": "artifacts/filings_index.json",
             "format": "json",
             "source": "sec-edgar",
             "summary": f"{len(filings)} filings in past year",
@@ -867,7 +867,7 @@ def main() -> int:
             success_steps += 1
             artifacts.append({
                 "name": "8k_summary",
-                "path": "artifacts/sec_8k_summary.json",
+                "path": "artifacts/8k_summary.json",
                 "format": "json",
                 "source": "sec-edgar",
                 "summary": f"{len(summaries_8k)} 8-K filings in past year",

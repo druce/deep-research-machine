@@ -142,7 +142,10 @@ def substitute_vars(obj: Any, variables: dict[str, str]) -> Any:
 
 def cmd_init(args: argparse.Namespace) -> None:
     """Create db, parse DAG YAML, populate tasks + deps."""
-    workdir = Path(args.workdir)
+    if args.workdir:
+        workdir = Path(args.workdir)
+    else:
+        workdir = Path("work") / f"{args.ticker}_{args.date}"
     workdir.mkdir(parents=True, exist_ok=True)
 
     db_path = workdir / 'research.db'
@@ -362,13 +365,15 @@ def cmd_artifact_add(args: argparse.Namespace) -> None:
         except (json.JSONDecodeError, AttributeError):
             pass
 
-    # Compute size_bytes if file exists
-    size_bytes = None
+    # Verify file exists and is non-empty
     full_path = Path(args.workdir) / args.path
-    if full_path.exists():
-        size_bytes = full_path.stat().st_size
-    else:
-        logger.warning("Artifact file not found: %s", full_path)
+    if not full_path.exists():
+        conn.close()
+        error_exit(f"Artifact file not found: {full_path}")
+    size_bytes = full_path.stat().st_size
+    if size_bytes == 0:
+        conn.close()
+        error_exit(f"Artifact file is empty: {full_path}")
 
     # Check for duplicate (same task + name) — update if exists
     existing = conn.execute(
@@ -657,7 +662,7 @@ def main() -> int:
 
     # init
     p_init = subparsers.add_parser('init', help='Initialize database from DAG YAML')
-    p_init.add_argument('--workdir', required=True, help='Work directory path')
+    p_init.add_argument('--workdir', help='Work directory path (default: work/{TICKER}_{DATE})')
     p_init.add_argument('--dag', required=True, help='DAG YAML file path')
     p_init.add_argument('--ticker', required=True, help='Stock ticker symbol')
     p_init.add_argument('--date', default=datetime.now().strftime('%Y%m%d'),

@@ -1,9 +1,9 @@
-# Final Equity Research Report: {{ symbol }}
+# {{ company_name }} -- {{ timestamp }}
 
-**Company:** {{ company_name }}
+**Symbol:** {{ symbol }}
 **Sector:** {{ sector }} | **Industry:** {{ industry }}
-**Current Price:** ${{ latest_price }} | **Market Cap:** ${{ market_cap }}
-**Report Date:** {{ timestamp }}
+**Current Price:** ${{ latest_price }}
+**Market Cap:** ${{ market_cap }}
 
 ---
 
@@ -60,7 +60,7 @@
 |--------|------|-------|------------|-----|---------|--------|-----|
 | **{{ symbol }}** | **{{ company_name }}** | **${{ latest_price }}** | **${{ market_cap }}** | **{{ trailing_pe }}** | {% if revenue != 'N/A' %}**${{ (revenue | replace(',', '') | float / 1000000000) | round(1) }}B**{% else %}**N/A**{% endif %} | **{{ profit_margin }}%** | **{{ roe }}%** |
 {%- for peer in peers[:8] %}
-| {{ peer.symbol }} | {{ peer.name }} | ${{ peer.price }} | ${{ peer.market_cap }} | {{ peer.pe_ratio }} | {{ peer.revenue }} | {{ peer.profit_margin }} | {{ peer.roe }} |
+| {{ peer.symbol }} | {{ peer.name }} | ${{ peer.price }} | ${{ peer.market_cap }} | {{ peer.pe_ratio }} | {% if peer.revenue != 'N/A' %}${{ (peer.revenue | replace(',', '') | float / 1000000000) | round(1) }}B{% else %}N/A{% endif %} | {{ peer.profit_margin }} | {{ peer.roe }} |
 {%- endfor %}
 
 *Metrics: P/E (Trailing), Revenue (TTM in billions), Net Profit Margin, Return on Equity*

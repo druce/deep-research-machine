@@ -492,7 +492,7 @@ def test_db_init_with_v2_yaml(tmp_path):
         ],
         capture_output=True,
         text=True,
-        cwd="/Users/drucev/projects/sra2",
+        cwd="/Users/drucev/projects/sra3",
     )
     assert result.returncode == 0, f"stderr: {result.stderr}\nstdout: {result.stdout}"
     import json
@@ -516,7 +516,7 @@ def test_db_validate_command_valid():
         ],
         capture_output=True,
         text=True,
-        cwd="/Users/drucev/projects/sra2",
+        cwd="/Users/drucev/projects/sra3",
     )
     assert result.returncode == 0, f"stderr: {result.stderr}\nstdout: {result.stdout}"
     import json
@@ -545,6 +545,6 @@ tasks:
         ],
         capture_output=True,
         text=True,
-        cwd="/Users/drucev/projects/sra2",
+        cwd="/Users/drucev/projects/sra3",
     )
     assert result.returncode == 1
