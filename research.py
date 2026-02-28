@@ -344,7 +344,8 @@ async def run_claude_task(task: dict, workdir: Path) -> dict:
             "manifest": None,
         }
 
-    all_artifacts = list(result["artifacts"])
+    # Only keep primary artifacts (not critic/rewrite intermediates)
+    primary_artifacts = list(result["artifacts"])
 
     # Step 2: Critic-optimizer loop
     n_iterations = params.get("n_iterations", 0)
@@ -358,14 +359,24 @@ async def run_claude_task(task: dict, workdir: Path) -> dict:
             primary_path = Path(primary_output["path"])
             stem = primary_path.stem
             suffix = primary_path.suffix
-            parent = str(primary_path.parent)
-            draft_path = primary_output["path"]
+
+            # Create drafts directory and copy initial write as v0
+            drafts_dir = workdir / "drafts"
+            drafts_dir.mkdir(exist_ok=True)
+
+            v0_path = f"drafts/{stem}_v0{suffix}"
+            shutil.copy2(
+                str(workdir / primary_output["path"]),
+                str(workdir / v0_path),
+            )
+            log(f"  [{task['id']}] Copied initial write to {v0_path}")
+            draft_path = v0_path
 
             for i in range(1, n_iterations + 1):
                 log(f"  [{task['id']}] Critic-optimizer iteration {i}/{n_iterations}")
 
                 # --- Critic step ---
-                critique_path = f"{parent}/{stem}_critic_{i}{suffix}"
+                critique_path = f"drafts/{stem}_critic_{i}{suffix}"
                 critic_prompt = (
                     critic_prompt_template
                     .replace("${draft_path}", draft_path)
@@ -393,13 +404,12 @@ async def run_claude_task(task: dict, workdir: Path) -> dict:
                         "task_id": task["id"],
                         "status": "failed",
                         "error": f"Critic iteration {i} failed: {critic_result['error']}",
-                        "artifacts": all_artifacts,
+                        "artifacts": primary_artifacts,
                         "manifest": None,
                     }
-                all_artifacts.extend(critic_result["artifacts"])
 
                 # --- Rewrite step ---
-                rewrite_path = f"{parent}/{stem}_v{i + 1}{suffix}"
+                rewrite_path = f"drafts/{stem}_v{i}{suffix}"
                 rewrite_prompt = (
                     rewrite_prompt_template
                     .replace("${draft_path}", draft_path)
@@ -428,17 +438,16 @@ async def run_claude_task(task: dict, workdir: Path) -> dict:
                         "task_id": task["id"],
                         "status": "failed",
                         "error": f"Rewrite iteration {i} failed: {rewrite_result['error']}",
-                        "artifacts": all_artifacts,
+                        "artifacts": primary_artifacts,
                         "manifest": None,
                     }
-                all_artifacts.extend(rewrite_result["artifacts"])
 
-                # Copy rewrite to original output path for downstream compatibility
+                # Publish: copy rewrite to artifacts (overwrite primary output)
                 rewrite_file = workdir / rewrite_path
                 original_file = workdir / primary_output["path"]
                 if rewrite_file.exists():
                     shutil.copy2(str(rewrite_file), str(original_file))
-                    log(f"  [{task['id']}] Copied {rewrite_path} -> {primary_output['path']}")
+                    log(f"  [{task['id']}] Published {rewrite_path} -> {primary_output['path']}")
 
                 # Update draft_path for next iteration
                 draft_path = rewrite_path
@@ -447,7 +456,7 @@ async def run_claude_task(task: dict, workdir: Path) -> dict:
         "task_id": task["id"],
         "status": "complete",
         "error": None,
-        "artifacts": all_artifacts,
+        "artifacts": primary_artifacts,
         "manifest": None,
     }
 
