@@ -88,6 +88,7 @@ class ClaudeConfig(BaseModel):
     rewrite_model: str | None = None
     critic_disallowed_tools: list[str] = []
     rewrite_disallowed_tools: list[str] = []
+    artifacts_inline: list[str] = []  # artifact paths to inject inline into prompt
 
 
 class ShellConfig(BaseModel):

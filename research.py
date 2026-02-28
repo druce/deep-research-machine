@@ -145,6 +145,7 @@ async def _invoke_claude(
     model: str | None = None,
     max_budget_usd: float | None = None,
     expected_outputs: dict[str, dict] | None = None,
+    artifacts_inline: list[str] | None = None,
 ) -> dict:
     """Invoke claude CLI with a prompt. Return result dict with status, error, artifacts."""
     abs_workdir = str(workdir.resolve())
@@ -156,9 +157,30 @@ async def _invoke_claude(
         parts.append(system)
         parts.append("")
 
-    parts.append("All research data is in the artifacts/ subdirectory.")
-    parts.append(
-        "Read artifacts/manifest.json for a description of all available files.")
+    inline_artifacts = artifacts_inline or []
+    if inline_artifacts:
+        parts.append(
+            "Key artifacts are included inline below.")
+        parts.append(
+            "Additional files are in artifacts/ — use Read tool for larger files not included inline.")
+    else:
+        parts.append("All research data is in the artifacts/ subdirectory.")
+        parts.append(
+            "Read artifacts/manifest.json for a description of all available files.")
+
+    # Inline artifacts
+    if inline_artifacts:
+        parts.append("")
+        parts.append("--- INLINE ARTIFACTS ---")
+        for art_path in inline_artifacts:
+            full_path = workdir / art_path
+            if full_path.exists() and full_path.stat().st_size < 50_000:
+                parts.append(f"\n## {art_path}\n")
+                parts.append(full_path.read_text())
+            else:
+                log(f"  [{task_id}] Skipping inline: {art_path} (missing or >50KB)")
+        parts.append("--- END INLINE ARTIFACTS ---")
+
     parts.append("")
     parts.append("---")
     parts.append("")
@@ -362,6 +384,7 @@ async def run_claude_task(task: dict, workdir: Path) -> dict:
         model=params.get("model"),
         max_budget_usd=params.get("max_budget_usd"),
         expected_outputs=write_outputs,
+        artifacts_inline=params.get("artifacts_inline") or None,
     )
 
     if result["status"] != "complete":
@@ -419,6 +442,7 @@ async def run_claude_task(task: dict, workdir: Path) -> dict:
                 model=params.get("critic_model") or params.get("model"),
                 max_budget_usd=params.get("max_budget_usd"),
                 expected_outputs=critic_outputs,
+                artifacts_inline=params.get("artifacts_inline") or None,
             )
 
             if critic_result["status"] != "complete":
@@ -453,6 +477,7 @@ async def run_claude_task(task: dict, workdir: Path) -> dict:
                 model=params.get("rewrite_model") or params.get("model"),
                 max_budget_usd=params.get("max_budget_usd"),
                 expected_outputs=rewrite_outputs,
+                artifacts_inline=params.get("artifacts_inline") or None,
             )
 
             if rewrite_result["status"] != "complete":

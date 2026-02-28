@@ -122,17 +122,27 @@ tasks:
     depends_on: [profile, technical, fundamental, perplexity, fetch_edgar, wikipedia, perplexity_analysis]
     config:
       system: "You are a senior equity research analyst writing a professional report. Read and follow the style guide at ../../STYLE.md."
-      disallowed_tools: []
+      disallowed_tools: [WebSearch, WebFetch, Agent, Skill, Bash, yfinance, alphavantage, brave-search, perplexity-ask, wikipedia, playwright, fetch, filesystem]
+      artifacts_inline:
+        - artifacts/manifest.json
+        - artifacts/profile.json
+        - artifacts/peers_list.json
+        - artifacts/key_ratios.csv
+        - artifacts/income_statement.csv
+        - artifacts/balance_sheet.csv
+        - artifacts/cash_flow.csv
+        - artifacts/analyst_recommendations.json
+        - artifacts/technical_analysis.json
+        - artifacts/news_stories.md
+        - artifacts/8k_summary.json
       prompt: |
         I have collected comprehensive information on ${ticker} in the directory ${workdir}.
 
         IMPORTANT: Read the style guide at ../../STYLE.md before writing. Follow its formatting conventions, source reliability hierarchy, and naming conventions.
 
-        You also have access to powerful financial research tools through MCP servers. Use these tools to:
-        - Fill gaps in the provided research
-        - Find recent developments not covered in the report
-        - Gather additional market data and competitive intelligence
-        - The provided artifacts are up to date, you do not need to verify them unless there is contradictory information
+        All research data you need is provided in the inline artifacts above and in the artifacts/ directory.
+        Use Read and Grep tools to access larger files not included inline.
+        Do not attempt external research — synthesize from the provided data only.
 
         Write Section 2 of an equity research report on ${ticker}: Extended Profile.
 
@@ -190,17 +200,27 @@ tasks:
     depends_on: [profile, technical, fundamental, perplexity, fetch_edgar, wikipedia, perplexity_analysis]
     config:
       system: "You are a senior equity research analyst writing a professional report. Read and follow the style guide at ../../STYLE.md."
-      disallowed_tools: []
+      disallowed_tools: [WebSearch, WebFetch, Agent, Skill, Bash, yfinance, alphavantage, brave-search, perplexity-ask, wikipedia, playwright, fetch, filesystem]
+      artifacts_inline:
+        - artifacts/manifest.json
+        - artifacts/profile.json
+        - artifacts/peers_list.json
+        - artifacts/key_ratios.csv
+        - artifacts/income_statement.csv
+        - artifacts/balance_sheet.csv
+        - artifacts/cash_flow.csv
+        - artifacts/analyst_recommendations.json
+        - artifacts/technical_analysis.json
+        - artifacts/news_stories.md
+        - artifacts/8k_summary.json
       prompt: |
         I have collected comprehensive information on ${ticker} in the directory ${workdir}.
 
         IMPORTANT: Read the style guide at ../../STYLE.md before writing. Follow its formatting conventions, source reliability hierarchy, and naming conventions.
 
-        You also have access to powerful financial research tools through MCP servers. Use these tools to:
-        - Fill gaps in the provided research
-        - Find recent developments not covered in the report
-        - Gather additional market data and competitive intelligence
-        - The provided artifacts are up to date, you do not need to verify them unless there is contradictory information
+        All research data you need is provided in the inline artifacts above and in the artifacts/ directory.
+        Use Read and Grep tools to access larger files not included inline.
+        Do not attempt external research — synthesize from the provided data only.
 
         Write Section 3 of an equity research report on ${ticker}: Business Model.
 
@@ -264,17 +284,27 @@ tasks:
     depends_on: [profile, technical, fundamental, perplexity, fetch_edgar, wikipedia, perplexity_analysis]
     config:
       system: "You are a senior equity research analyst writing a professional report. Read and follow the style guide at ../../STYLE.md."
-      disallowed_tools: []
+      disallowed_tools: [WebSearch, WebFetch, Agent, Skill, Bash, yfinance, alphavantage, brave-search, perplexity-ask, wikipedia, playwright, fetch, filesystem]
+      artifacts_inline:
+        - artifacts/manifest.json
+        - artifacts/profile.json
+        - artifacts/peers_list.json
+        - artifacts/key_ratios.csv
+        - artifacts/income_statement.csv
+        - artifacts/balance_sheet.csv
+        - artifacts/cash_flow.csv
+        - artifacts/analyst_recommendations.json
+        - artifacts/technical_analysis.json
+        - artifacts/news_stories.md
+        - artifacts/8k_summary.json
       prompt: |
         I have collected comprehensive information on ${ticker} in the directory ${workdir}.
 
         IMPORTANT: Read the style guide at ../../STYLE.md before writing. Follow its formatting conventions, source reliability hierarchy, and naming conventions.
 
-        You also have access to powerful financial research tools through MCP servers. Use these tools to:
-        - Fill gaps in the provided research
-        - Find recent developments not covered in the report
-        - Gather additional market data and competitive intelligence
-        - The provided artifacts are up to date, you do not need to verify them unless there is contradictory information
+        All research data you need is provided in the inline artifacts above and in the artifacts/ directory.
+        Use Read and Grep tools to access larger files not included inline.
+        Do not attempt external research — synthesize from the provided data only.
 
         Write Section 4 of an equity research report on ${ticker}: Competitive Landscape.
 
@@ -331,17 +361,27 @@ tasks:
     depends_on: [profile, technical, fundamental, perplexity, fetch_edgar, wikipedia, perplexity_analysis]
     config:
       system: "You are a senior equity research analyst writing a professional report. Read and follow the style guide at ../../STYLE.md."
-      disallowed_tools: []
+      disallowed_tools: [WebSearch, WebFetch, Agent, Skill, Bash, yfinance, alphavantage, brave-search, perplexity-ask, wikipedia, playwright, fetch, filesystem]
+      artifacts_inline:
+        - artifacts/manifest.json
+        - artifacts/profile.json
+        - artifacts/peers_list.json
+        - artifacts/key_ratios.csv
+        - artifacts/income_statement.csv
+        - artifacts/balance_sheet.csv
+        - artifacts/cash_flow.csv
+        - artifacts/analyst_recommendations.json
+        - artifacts/technical_analysis.json
+        - artifacts/news_stories.md
+        - artifacts/8k_summary.json
       prompt: |
         I have collected comprehensive information on ${ticker} in the directory ${workdir}.
 
         IMPORTANT: Read the style guide at ../../STYLE.md before writing. Follow its formatting conventions, source reliability hierarchy, and naming conventions.
 
-        You also have access to powerful financial research tools through MCP servers. Use these tools to:
-        - Fill gaps in the provided research
-        - Find recent developments not covered in the report
-        - Gather additional market data and competitive intelligence
-        - The provided artifacts are up to date, you do not need to verify them unless there is contradictory information
+        All research data you need is provided in the inline artifacts above and in the artifacts/ directory.
+        Use Read and Grep tools to access larger files not included inline.
+        Do not attempt external research — synthesize from the provided data only.
 
         Write Section 5 of an equity research report on ${ticker}: Supply Chain Positioning.
 
@@ -398,17 +438,27 @@ tasks:
     depends_on: [profile, technical, fundamental, perplexity, fetch_edgar, wikipedia, perplexity_analysis]
     config:
       system: "You are a senior equity research analyst writing a professional report. Read and follow the style guide at ../../STYLE.md."
-      disallowed_tools: []
+      disallowed_tools: [WebSearch, WebFetch, Agent, Skill, Bash, yfinance, alphavantage, brave-search, perplexity-ask, wikipedia, playwright, fetch, filesystem]
+      artifacts_inline:
+        - artifacts/manifest.json
+        - artifacts/profile.json
+        - artifacts/peers_list.json
+        - artifacts/key_ratios.csv
+        - artifacts/income_statement.csv
+        - artifacts/balance_sheet.csv
+        - artifacts/cash_flow.csv
+        - artifacts/analyst_recommendations.json
+        - artifacts/technical_analysis.json
+        - artifacts/news_stories.md
+        - artifacts/8k_summary.json
       prompt: |
         I have collected comprehensive information on ${ticker} in the directory ${workdir}.
 
         IMPORTANT: Read the style guide at ../../STYLE.md before writing. Follow its formatting conventions, source reliability hierarchy, and naming conventions.
 
-        You also have access to powerful financial research tools through MCP servers. Use these tools to:
-        - Fill gaps in the provided research
-        - Find recent developments not covered in the report
-        - Gather additional market data and competitive intelligence
-        - The provided artifacts are up to date, you do not need to verify them unless there is contradictory information
+        All research data you need is provided in the inline artifacts above and in the artifacts/ directory.
+        Use Read and Grep tools to access larger files not included inline.
+        Do not attempt external research — synthesize from the provided data only.
 
         Write Section 6 of an equity research report on ${ticker}: Financial and Operating Leverage.
 
@@ -467,17 +517,27 @@ tasks:
     depends_on: [profile, technical, fundamental, perplexity, fetch_edgar, wikipedia, perplexity_analysis]
     config:
       system: "You are a senior equity research analyst writing a professional report. Read and follow the style guide at ../../STYLE.md."
-      disallowed_tools: []
+      disallowed_tools: [WebSearch, WebFetch, Agent, Skill, Bash, yfinance, alphavantage, brave-search, perplexity-ask, wikipedia, playwright, fetch, filesystem]
+      artifacts_inline:
+        - artifacts/manifest.json
+        - artifacts/profile.json
+        - artifacts/peers_list.json
+        - artifacts/key_ratios.csv
+        - artifacts/income_statement.csv
+        - artifacts/balance_sheet.csv
+        - artifacts/cash_flow.csv
+        - artifacts/analyst_recommendations.json
+        - artifacts/technical_analysis.json
+        - artifacts/news_stories.md
+        - artifacts/8k_summary.json
       prompt: |
         I have collected comprehensive information on ${ticker} in the directory ${workdir}.
 
         IMPORTANT: Read the style guide at ../../STYLE.md before writing. Follow its formatting conventions, source reliability hierarchy, and naming conventions.
 
-        You also have access to powerful financial research tools through MCP servers. Use these tools to:
-        - Fill gaps in the provided research
-        - Find recent developments not covered in the report
-        - Gather additional market data and competitive intelligence
-        - The provided artifacts are up to date, you do not need to verify them unless there is contradictory information
+        All research data you need is provided in the inline artifacts above and in the artifacts/ directory.
+        Use Read and Grep tools to access larger files not included inline.
+        Do not attempt external research — synthesize from the provided data only.
 
         Write Section 7 of an equity research report on ${ticker}: Valuation.
 
@@ -536,30 +596,43 @@ tasks:
     depends_on: [profile, technical, fundamental, perplexity, fetch_edgar, wikipedia, perplexity_analysis]
     config:
       system: "You are a senior equity research analyst writing a professional report. Read and follow the style guide at ../../STYLE.md."
-      disallowed_tools: []
+      disallowed_tools: [WebSearch, WebFetch, Agent, Skill, Bash, yfinance, alphavantage, brave-search, perplexity-ask, wikipedia, playwright, fetch, filesystem]
+      artifacts_inline:
+        - artifacts/manifest.json
+        - artifacts/profile.json
+        - artifacts/peers_list.json
+        - artifacts/key_ratios.csv
+        - artifacts/income_statement.csv
+        - artifacts/balance_sheet.csv
+        - artifacts/cash_flow.csv
+        - artifacts/analyst_recommendations.json
+        - artifacts/technical_analysis.json
+        - artifacts/news_stories.md
+        - artifacts/8k_summary.json
       prompt: |
         I have collected comprehensive information on ${ticker} in the directory ${workdir}.
 
         IMPORTANT: Read the style guide at ../../STYLE.md before writing. Follow its formatting conventions, source reliability hierarchy, and naming conventions.
 
-        You also have access to powerful financial research tools through MCP servers. Use these tools to:
-        - Fill gaps in the provided research
-        - Find recent developments not covered in the report
-        - Gather additional market data and competitive intelligence
-        - The provided artifacts are up to date, you do not need to verify them unless there is contradictory information
+        All research data you need is provided in the inline artifacts above and in the artifacts/ directory.
+        Use Read and Grep tools to access larger files not included inline.
+        Do not attempt external research — synthesize from the provided data only.
 
         Write Section 8 of an equity research report on ${ticker}: Recent Developments, News Search and Risk Factors.
 
-        For this section, use your MCP tools to conduct deep research:
-        • Search for: ${ticker} + "analyst report" OR "research note" downgrade OR upgrade
-        • Use perplexity to search: "What are the most significant investigative reports and executive profiles about ${ticker} published in 2024-2025?"
-        • Look for: revenue trends, management changes, product launches, M&A, restructurings
-        • Investigate: short-seller reports, regulatory investigations, lawsuits
-        • Check for: product failures, supply chain disruptions
-        • Find: major wins, partnerships, large customer acquisitions
-        • Research: insider trading patterns and institutional ownership changes
-        • Consider: potential acquirers or acquisition targets
-        • Note any other key themes or trends that you think are important
+        Use the comprehensive news research provided in the artifacts. Key sources:
+        - artifacts/news_stories.md — Recent developments, regulatory, strategic, and industry news
+        - artifacts/risk_analysis.md — Categorized risk analysis
+        - artifacts/investment_thesis.md — Bull/bear cases, key watchpoints
+        - artifacts/news.json — Recent news article summaries
+        - artifacts/sec_10k_item1a_risk_factors.md — SEC-filed risk factors
+
+        Synthesize these sources into a comprehensive section covering:
+        • Recent corporate developments and their significance
+        • Regulatory actions, legal proceedings, and compliance
+        • Strategic partnerships, M&A activity, competitive dynamics
+        • Analyst sentiment shifts and institutional ownership changes
+        • Key risk factors by category (operational, financial, regulatory, market)
 
         Use a straightforward, factual tone throughout the analysis. Focus on data and observable facts rather than speculation.
 
@@ -623,7 +696,14 @@ tasks:
     depends_on: [assemble_body]
     config:
       system: "You are a senior equity research analyst writing a professional report. Read and follow the style guide at ../../STYLE.md."
-      disallowed_tools: [yfinance, alphavantage, brave-search, perplexity-ask, wikipedia, playwright, fetch, filesystem]
+      disallowed_tools: [WebSearch, WebFetch, Agent, Skill, Bash, yfinance, alphavantage, brave-search, perplexity-ask, wikipedia, playwright, fetch, filesystem]
+      artifacts_inline:
+        - artifacts/manifest.json
+        - artifacts/profile.json
+        - artifacts/peers_list.json
+        - artifacts/key_ratios.csv
+        - artifacts/analyst_recommendations.json
+        - artifacts/technical_analysis.json
       prompt: |
         read the report body at artifacts/assembled_body.md carefully and write a concluding 1-3 short paragraphs < 500 words total.
             • Summarize the company's strategic position and the stock's investment risk/reward profile
@@ -641,7 +721,10 @@ tasks:
     depends_on: [assemble_body, write_conclusion]
     config:
       system: "You are a senior equity research analyst writing a professional report. Read and follow the style guide at ../../STYLE.md."
-      disallowed_tools: [yfinance, alphavantage, brave-search, perplexity-ask, wikipedia, playwright, fetch, filesystem]
+      disallowed_tools: [WebSearch, WebFetch, Agent, Skill, Bash, yfinance, alphavantage, brave-search, perplexity-ask, wikipedia, playwright, fetch, filesystem]
+      artifacts_inline:
+        - artifacts/manifest.json
+        - artifacts/profile.json
       prompt: |
         read the report body at artifacts/assembled_body.md and the conclusion at artifacts/conclusion.md carefully, then write a short introductory paragraph < 100 words.
 
@@ -673,7 +756,14 @@ tasks:
       system: "You are a senior equity research editor with expertise in financial analysis and report quality. Read and follow the style guide at ../../STYLE.md."
       model: claude-sonnet-4-6
       max_budget_usd: 1.00
-      disallowed_tools: [yfinance, alphavantage, brave-search, perplexity-ask, wikipedia, playwright, fetch, filesystem]
+      disallowed_tools: [WebSearch, WebFetch, Agent, Skill, Bash, yfinance, alphavantage, brave-search, perplexity-ask, wikipedia, playwright, fetch, filesystem]
+      artifacts_inline:
+        - artifacts/manifest.json
+        - artifacts/profile.json
+        - artifacts/key_ratios.csv
+        - artifacts/analyst_recommendations.json
+        - artifacts/technical_analysis.json
+        - artifacts/8k_summary.json
       prompt: |
         Read the assembled report text at artifacts/report_body.md carefully and provide a detailed critique.
 
@@ -704,7 +794,14 @@ tasks:
       system: "You are a senior equity research analyst revising a report based on editorial feedback. Read and follow the style guide at ../../STYLE.md."
       model: claude-sonnet-4-6
       max_budget_usd: 1.00
-      disallowed_tools: [yfinance, alphavantage, brave-search, perplexity-ask, wikipedia, playwright, fetch, filesystem]
+      disallowed_tools: [WebSearch, WebFetch, Agent, Skill, Bash, yfinance, alphavantage, brave-search, perplexity-ask, wikipedia, playwright, fetch, filesystem]
+      artifacts_inline:
+        - artifacts/manifest.json
+        - artifacts/profile.json
+        - artifacts/key_ratios.csv
+        - artifacts/analyst_recommendations.json
+        - artifacts/technical_analysis.json
+        - artifacts/8k_summary.json
       prompt: |
         Read the critique at artifacts/report_critique.md and the current report text at artifacts/report_body.md.
 

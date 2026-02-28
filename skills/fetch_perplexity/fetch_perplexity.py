@@ -42,6 +42,7 @@ from config import (  # noqa: E402
     PERPLEXITY_MODEL,
     PERPLEXITY_TEMPERATURE,
     PERPLEXITY_MAX_TOKENS,
+    PERPLEXITY_NEWS_QUERIES,
     NEWS_STORIES_COUNT,
     NEWS_STORIES_SINCE,
     MAX_RETRIES,
@@ -185,7 +186,10 @@ async def query_perplexity(
 
 async def save_news_research(symbol: str, workdir: str, company_identifier: str) -> bool:
     """
-    Query Perplexity for major news stories and save to Markdown.
+    Query Perplexity for major news stories via 3 parallel queries and save to Markdown.
+
+    Runs three focused queries in parallel (recent developments, regulatory/legal,
+    strategic/competitive) and combines results into a structured document.
 
     Args:
         symbol: Stock ticker symbol
@@ -193,38 +197,50 @@ async def save_news_research(symbol: str, workdir: str, company_identifier: str)
         company_identifier: Human-readable company name
 
     Returns:
-        True if research was saved successfully
+        True if at least one query succeeded
     """
     logger.info("--- News Research for %s (%s) ---", company_identifier, symbol)
 
-    prompt = (
-        f"Provide a comprehensive summary of the {NEWS_STORIES_COUNT} most significant "
-        f"news stories and developments for {company_identifier} (ticker: {symbol}) "
-        f"since {NEWS_STORIES_SINCE}. For each story, include:\n\n"
-        f"1. **Date** — when the event occurred or was announced\n"
-        f"2. **Headline** — a concise summary of the news\n"
-        f"3. **Details** — 2-3 sentences explaining the significance and impact\n"
-        f"4. **Market Impact** — how the stock or market reacted, if known\n\n"
-        f"Focus on material events such as:\n"
-        f"- Earnings surprises (beats or misses)\n"
-        f"- Major product launches or strategic announcements\n"
-        f"- M&A activity (acquisitions, divestitures, mergers)\n"
-        f"- Leadership changes (CEO, CFO, board members)\n"
-        f"- Regulatory actions or legal developments\n"
-        f"- Significant partnerships or contract wins\n"
-        f"- Guidance changes or analyst rating shifts\n"
-        f"- Any controversies or reputational events\n\n"
-        f"Order stories chronologically from most recent to oldest. "
-        f"Use Markdown formatting with headers for each story."
+    max_tokens = PERPLEXITY_MAX_TOKENS.get("news_stories", 6000)
+
+    # Build prompts from templates
+    queries = []
+    for section_name, template in PERPLEXITY_NEWS_QUERIES:
+        prompt = template.format(
+            company=company_identifier,
+            symbol=symbol,
+            since=NEWS_STORIES_SINCE,
+        )
+        queries.append((section_name, prompt))
+
+    # Run all queries in parallel
+    results = await asyncio.gather(
+        *[query_perplexity(prompt, max_tokens=max_tokens) for _, prompt in queries],
+        return_exceptions=True,
     )
 
-    content = await query_perplexity(
-        prompt,
-        max_tokens=PERPLEXITY_MAX_TOKENS.get("news_stories", 4000),
-    )
+    # Combine results
+    section_titles = {
+        "recent_developments": "Recent Developments",
+        "regulatory_legal": "Regulatory & Legal",
+        "strategic_competitive": "Strategic & Competitive",
+    }
 
-    if not content:
-        logger.error("Failed to retrieve news research")
+    sections = []
+    succeeded = 0
+    for (section_name, _), result in zip(queries, results):
+        if isinstance(result, Exception):
+            logger.error("News query '%s' raised exception: %s", section_name, result)
+            continue
+        if not result:
+            logger.warning("News query '%s' returned empty", section_name)
+            continue
+        title = section_titles.get(section_name, section_name)
+        sections.append(f"## {title}\n\n{result}")
+        succeeded += 1
+
+    if succeeded == 0:
+        logger.error("All news queries failed")
         return False
 
     output_dir = ensure_directory(Path(workdir) / "artifacts")
@@ -233,13 +249,14 @@ async def save_news_research(symbol: str, workdir: str, company_identifier: str)
     header = (
         f"# Major News Stories: {company_identifier} ({symbol})\n\n"
         f"_Research generated via Perplexity AI ({PERPLEXITY_MODEL}) | "
-        f"Stories since {NEWS_STORIES_SINCE}_\n\n---\n\n"
+        f"Stories since {NEWS_STORIES_SINCE} | "
+        f"{succeeded}/{len(queries)} queries succeeded_\n\n---\n\n"
     )
 
     with output_path.open("w") as f:
-        f.write(header + content)
+        f.write(header + "\n\n".join(sections))
 
-    logger.info("Saved news research to %s", output_path)
+    logger.info("Saved news research to %s (%d sections)", output_path, succeeded)
     return True
 
 

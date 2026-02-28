@@ -106,8 +106,21 @@ def save_income_statement_sankey(
         logger.warning("  [FAIL] No income statement data for Sankey chart")
         return False
 
-    # Use the most recent period (first column)
-    latest = income_stmt.iloc[:, 0]
+    # Use the most recent period with valid revenue data
+    # yfinance sometimes returns an incomplete future fiscal year as column 0
+    latest = None
+    revenue_keys = ["Total Revenue", "TotalRevenue"]
+    for col_idx in range(income_stmt.shape[1]):
+        col = income_stmt.iloc[:, col_idx]
+        for rk in revenue_keys:
+            if rk in col.index and pd.notna(col.get(rk)) and float(col[rk]) > 0:
+                latest = col
+                break
+        if latest is not None:
+            break
+    if latest is None:
+        logger.warning("  [FAIL] No column with valid revenue data for Sankey chart")
+        return False
 
     def _val(key: str) -> float:
         """Safely extract a numeric value from the latest period."""
