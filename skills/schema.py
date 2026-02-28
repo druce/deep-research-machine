@@ -31,6 +31,7 @@ class DagHeader(BaseModel):
     inputs: dict[str, str] = {}
     root_dir: str = "."
     template_dir: str = "templates"
+    drafts_dir: str = "drafts"
 
 
 class PythonConfig(BaseModel):

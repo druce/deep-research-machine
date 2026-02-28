@@ -74,6 +74,16 @@ def test_dag_header_defaults():
     assert header.template_dir == "templates"
 
 
+def test_dag_header_drafts_dir_default():
+    header = DagHeader(version=2, name="Test")
+    assert header.drafts_dir == "drafts"
+
+
+def test_dag_header_drafts_dir_custom():
+    header = DagHeader(version=2, name="Test", drafts_dir="my_drafts")
+    assert header.drafts_dir == "my_drafts"
+
+
 def test_python_config_valid():
     cfg = PythonConfig(script="skills/fetch_profile/fetch_profile.py", args={"ticker": "AAPL"})
     assert cfg.script == "skills/fetch_profile/fetch_profile.py"
