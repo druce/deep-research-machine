@@ -585,6 +585,35 @@ def test_sra_yaml_validates():
         assert task.type in ("python", "claude", "shell"), f"Bad type in {task_id}"
 
 
+def test_sra_yaml_critic_config():
+    """Write tasks in the actual DAG have valid critic-optimizer config."""
+    from pathlib import Path
+    import yaml
+
+    yaml_path = Path(__file__).parent.parent / "dags" / "sra.yaml"
+    with yaml_path.open() as f:
+        raw = yaml.safe_load(f)
+    dag = validate_dag(raw)
+
+    write_tasks = [tid for tid in dag.tasks if tid.startswith("write_")]
+    # Exclude write_conclusion and write_intro — they don't need critic loops
+    section_writers = [
+        tid for tid in write_tasks
+        if tid not in ("write_conclusion", "write_intro")
+    ]
+    assert len(section_writers) == 7
+
+    for tid in section_writers:
+        task = dag.tasks[tid]
+        assert task.config.n_iterations >= 1, f"{tid} should have n_iterations >= 1"
+        assert task.config.critic_prompt, f"{tid} missing critic_prompt"
+        assert task.config.rewrite_prompt, f"{tid} missing rewrite_prompt"
+        assert "${draft_path}" in task.config.critic_prompt, f"{tid} critic_prompt missing ${{draft_path}}"
+        assert "${critique_path}" in task.config.critic_prompt, f"{tid} critic_prompt missing ${{critique_path}}"
+        assert "${draft_path}" in task.config.rewrite_prompt, f"{tid} rewrite_prompt missing ${{draft_path}}"
+        assert "${rewrite_path}" in task.config.rewrite_prompt, f"{tid} rewrite_prompt missing ${{rewrite_path}}"
+
+
 # ---------------------------------------------------------------------------
 # Integration test: db.py init with v2 YAML
 # ---------------------------------------------------------------------------
