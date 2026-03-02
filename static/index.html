@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SRA4 — Stock Research Agent</title>
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --surface: #12121a;
+    --border: #1a1a2e;
+    --cyan: #00f0ff;
+    --magenta: #ff00aa;
+    --green: #00ff88;
+    --red: #ff3366;
+    --text: #e0e0e0;
+    --dim: #666680;
+  }
+
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 0 24px 24px;
+  }
+
+  /* --- Header --- */
+  header {
+    text-align: center;
+    padding: 40px 0 24px;
+    width: 100%;
+  }
+
+  header h1 {
+    font-size: 2rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: var(--text);
+    text-shadow:
+      0 0 10px rgba(0, 240, 255, 0.3),
+      0 0 30px rgba(0, 240, 255, 0.1);
+  }
+
+  header h1 span {
+    color: var(--cyan);
+  }
+
+  header .subtitle {
+    color: var(--dim);
+    font-size: 0.85rem;
+    margin-top: 6px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  /* --- Input area --- */
+  .input-area {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    align-items: center;
+    margin-bottom: 28px;
+    width: 100%;
+    max-width: 480px;
+  }
+
+  #ticker-input {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-size: 1.1rem;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    padding: 12px 20px;
+    border-radius: 6px;
+    outline: none;
+    width: 240px;
+    text-transform: uppercase;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+
+  #ticker-input::placeholder {
+    color: var(--dim);
+    font-weight: 400;
+    letter-spacing: 0.12em;
+  }
+
+  #ticker-input:focus {
+    border-color: var(--cyan);
+    box-shadow: 0 0 10px rgba(0, 240, 255, 0.4), 0 0 30px rgba(0, 240, 255, 0.1);
+  }
+
+  #ticker-input:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  #run-btn {
+    background: var(--magenta);
+    color: #fff;
+    border: none;
+    font-size: 1rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    padding: 12px 28px;
+    border-radius: 6px;
+    cursor: pointer;
+    text-transform: uppercase;
+    transition: box-shadow 0.2s, transform 0.1s, opacity 0.2s;
+  }
+
+  #run-btn:hover:not(:disabled) {
+    box-shadow: 0 0 14px rgba(255, 0, 170, 0.6), 0 0 40px rgba(255, 0, 170, 0.2);
+    transform: translateY(-1px);
+  }
+
+  #run-btn:active:not(:disabled) {
+    transform: translateY(0);
+  }
+
+  #run-btn:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+  }
+
+  /* --- Status bar --- */
+  .status-bar {
+    width: 100%;
+    max-width: 960px;
+    margin-bottom: 8px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    min-height: 24px;
+  }
+
+  .status-bar .info {
+    font-size: 0.8rem;
+    color: var(--dim);
+    letter-spacing: 0.04em;
+  }
+
+  .status-bar .info .val {
+    color: var(--cyan);
+    font-weight: 600;
+  }
+
+  .progress-track {
+    height: 3px;
+    width: 100%;
+    max-width: 960px;
+    background: var(--border);
+    border-radius: 2px;
+    margin-bottom: 20px;
+    overflow: hidden;
+  }
+
+  .progress-fill {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, var(--cyan), var(--green));
+    border-radius: 2px;
+    transition: width 0.4s ease;
+    box-shadow: 0 0 8px rgba(0, 240, 255, 0.4);
+  }
+
+  /* --- Task grid --- */
+  .task-grid-label {
+    width: 100%;
+    max-width: 960px;
+    font-size: 0.7rem;
+    color: var(--dim);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+
+  .task-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    width: 100%;
+    max-width: 960px;
+    margin-bottom: 24px;
+    min-height: 36px;
+  }
+
+  .task-pill {
+    padding: 6px 14px;
+    border-radius: 4px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    white-space: nowrap;
+    transition: background 0.3s, box-shadow 0.3s, color 0.3s;
+  }
+
+  .task-pill[data-status="pending"] {
+    background: #2a2a3a;
+    color: var(--dim);
+  }
+
+  .task-pill[data-status="running"] {
+    background: rgba(0, 240, 255, 0.15);
+    color: var(--cyan);
+    box-shadow: 0 0 8px rgba(0, 240, 255, 0.3);
+    animation: pulse-glow 1.5s ease-in-out infinite;
+  }
+
+  .task-pill[data-status="complete"] {
+    background: rgba(0, 255, 136, 0.15);
+    color: var(--green);
+  }
+
+  .task-pill[data-status="failed"] {
+    background: rgba(255, 51, 102, 0.15);
+    color: var(--red);
+    box-shadow: 0 0 8px rgba(255, 51, 102, 0.3);
+  }
+
+  @keyframes pulse-glow {
+    0%, 100% {
+      box-shadow: 0 0 8px rgba(0, 240, 255, 0.3);
+    }
+    50% {
+      box-shadow: 0 0 18px rgba(0, 240, 255, 0.6), 0 0 40px rgba(0, 240, 255, 0.15);
+    }
+  }
+
+  /* --- Log area --- */
+  .log-label {
+    width: 100%;
+    max-width: 960px;
+    font-size: 0.7rem;
+    color: var(--dim);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+
+  #log-output {
+    width: 100%;
+    max-width: 960px;
+    flex: 1;
+    min-height: 360px;
+    max-height: 520px;
+    overflow-y: auto;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 16px;
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', 'JetBrains Mono', Consolas, monospace;
+    font-size: 0.82rem;
+    line-height: 1.55;
+    color: var(--green);
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  #log-output::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  #log-output::-webkit-scrollbar-track {
+    background: var(--bg);
+  }
+
+  #log-output::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 3px;
+  }
+
+  #log-output::-webkit-scrollbar-thumb:hover {
+    background: var(--dim);
+  }
+
+  .log-task-prefix {
+    color: var(--cyan);
+    font-weight: 600;
+  }
+
+  .log-system {
+    color: var(--dim);
+    font-style: italic;
+  }
+
+  .log-complete {
+    color: var(--green);
+    font-weight: 700;
+  }
+
+  .log-error {
+    color: var(--red);
+  }
+
+  /* --- Tooltip for pills --- */
+  .task-pill[title] {
+    cursor: default;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1><span>SRA4</span> — Stock Research Agent</h1>
+  <div class="subtitle">Equity Research Pipeline</div>
+</header>
+
+<div class="input-area">
+  <input type="text" id="ticker-input" placeholder="TICKER" spellcheck="false" autocomplete="off">
+  <button id="run-btn">Run</button>
+</div>
+
+<div class="status-bar">
+  <span class="info" id="status-info"></span>
+  <span class="info" id="status-counts"></span>
+</div>
+<div class="progress-track">
+  <div class="progress-fill" id="progress-fill"></div>
+</div>
+
+<div class="task-grid-label" id="task-grid-label"></div>
+<div class="task-grid" id="task-grid"></div>
+
+<div class="log-label">Output</div>
+<div id="log-output"></div>
+
+<script>
+(function() {
+  'use strict';
+
+  const tickerInput = document.getElementById('ticker-input');
+  const runBtn = document.getElementById('run-btn');
+  const taskGrid = document.getElementById('task-grid');
+  const taskGridLabel = document.getElementById('task-grid-label');
+  const logOutput = document.getElementById('log-output');
+  const statusInfo = document.getElementById('status-info');
+  const statusCounts = document.getElementById('status-counts');
+  const progressFill = document.getElementById('progress-fill');
+
+  let ws = null;
+  let pollInterval = null;
+  let currentRunId = null;
+  let userScrolled = false;
+
+  // Track whether the user has scrolled away from the bottom
+  logOutput.addEventListener('scroll', function() {
+    const threshold = 40;
+    const atBottom = (logOutput.scrollHeight - logOutput.scrollTop - logOutput.clientHeight) < threshold;
+    userScrolled = !atBottom;
+  });
+
+  function autoScroll() {
+    if (!userScrolled) {
+      logOutput.scrollTop = logOutput.scrollHeight;
+    }
+  }
+
+  function appendLog(html) {
+    logOutput.insertAdjacentHTML('beforeend', html);
+    autoScroll();
+  }
+
+  function appendSystemLog(text) {
+    appendLog('<span class="log-system">' + escapeHtml(text) + '</span>\n');
+  }
+
+  function appendCompleteLog(text) {
+    appendLog('<span class="log-complete">' + escapeHtml(text) + '</span>\n');
+  }
+
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  function setRunning(state) {
+    tickerInput.disabled = state;
+    runBtn.disabled = state;
+  }
+
+  function clearUI() {
+    taskGrid.innerHTML = '';
+    taskGridLabel.textContent = '';
+    logOutput.innerHTML = '';
+    statusInfo.innerHTML = '';
+    statusCounts.innerHTML = '';
+    progressFill.style.width = '0%';
+    userScrolled = false;
+  }
+
+  // --- Task pill rendering ---
+  function renderTasks(taskDetails) {
+    if (!taskDetails || taskDetails.length === 0) return;
+
+    taskGridLabel.textContent = 'Tasks';
+
+    // Build a map of current pills for efficient update
+    const existingPills = {};
+    taskGrid.querySelectorAll('.task-pill').forEach(function(pill) {
+      existingPills[pill.dataset.id] = pill;
+    });
+
+    taskDetails.forEach(function(task) {
+      let pill = existingPills[task.id];
+      if (!pill) {
+        pill = document.createElement('div');
+        pill.className = 'task-pill';
+        pill.dataset.id = task.id;
+        pill.textContent = task.id;
+        taskGrid.appendChild(pill);
+      }
+      if (pill.dataset.status !== task.status) {
+        pill.dataset.status = task.status;
+      }
+      // Tooltip
+      let tip = task.id + ' — ' + task.status;
+      if (task.summary) tip += '\n' + task.summary;
+      if (task.error) tip += '\nError: ' + task.error;
+      pill.title = tip;
+    });
+  }
+
+  function updateProgress(tasks) {
+    if (!tasks || !tasks.total) return;
+    const done = (tasks.complete || 0) + (tasks.failed || 0) + (tasks.skipped || 0);
+    const pct = Math.round((done / tasks.total) * 100);
+    progressFill.style.width = pct + '%';
+
+    statusCounts.innerHTML =
+      '<span class="val">' + (tasks.complete || 0) + '</span> complete' +
+      '  ·  ' +
+      '<span class="val">' + (tasks.running || 0) + '</span> running' +
+      '  ·  ' +
+      '<span class="val">' + (tasks.pending || 0) + '</span> pending' +
+      (tasks.failed ? '  ·  <span style="color:var(--red)">' + tasks.failed + ' failed</span>' : '');
+  }
+
+  // --- Status polling ---
+  function startPolling(runId) {
+    stopPolling();
+    pollInterval = setInterval(function() {
+      fetch('/status/' + runId)
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+          if (data.error) return;
+          if (data.task_details) {
+            renderTasks(data.task_details);
+          }
+          if (data.tasks) {
+            updateProgress(data.tasks);
+          }
+          if (data.research) {
+            statusInfo.innerHTML = '<span class="val">' + escapeHtml(data.research.ticker) + '</span> — ' + data.research.status;
+          }
+        })
+        .catch(function() { /* status poll failure is non-fatal */ });
+    }, 2000);
+  }
+
+  function stopPolling() {
+    if (pollInterval) {
+      clearInterval(pollInterval);
+      pollInterval = null;
+    }
+  }
+
+  // --- WebSocket ---
+  function connectWebSocket(runId) {
+    const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = protocol + '//' + location.host + '/ws/' + runId;
+    ws = new WebSocket(wsUrl);
+
+    ws.onopen = function() {
+      appendSystemLog('Connected to pipeline stream...');
+    };
+
+    ws.onmessage = function(event) {
+      let msg;
+      try {
+        msg = JSON.parse(event.data);
+      } catch (e) {
+        appendLog(escapeHtml(event.data) + '\n');
+        return;
+      }
+
+      if (msg.type === 'log') {
+        const prefix = '<span class="log-task-prefix">[' + escapeHtml(msg.task) + ']</span> ';
+        // Split text into lines and prefix each with task name
+        const lines = msg.text.replace(/\n$/, '').split('\n');
+        lines.forEach(function(line) {
+          appendLog(prefix + escapeHtml(line) + '\n');
+        });
+      } else if (msg.type === 'complete') {
+        appendCompleteLog('Pipeline complete.');
+        if (msg.report) {
+          appendLog('<span class="log-complete">Report: ' + escapeHtml(msg.report) + '</span>\n');
+        }
+        onPipelineFinished();
+      }
+    };
+
+    ws.onerror = function() {
+      appendLog('<span class="log-error">WebSocket error</span>\n');
+    };
+
+    ws.onclose = function() {
+      appendSystemLog('Stream disconnected.');
+    };
+  }
+
+  function onPipelineFinished() {
+    stopPolling();
+    setRunning(false);
+    // Do one final status poll
+    if (currentRunId) {
+      fetch('/status/' + currentRunId)
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+          if (data.task_details) renderTasks(data.task_details);
+          if (data.tasks) updateProgress(data.tasks);
+          if (data.research) {
+            statusInfo.innerHTML = '<span class="val">' + escapeHtml(data.research.ticker) + '</span> — ' + data.research.status;
+          }
+        })
+        .catch(function() {});
+    }
+  }
+
+  // --- Run pipeline ---
+  function run() {
+    const ticker = tickerInput.value.trim().toUpperCase();
+    if (!ticker) {
+      tickerInput.focus();
+      return;
+    }
+
+    tickerInput.value = ticker;
+    clearUI();
+    setRunning(true);
+    appendSystemLog('Starting pipeline for ' + ticker + '...');
+
+    fetch('/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ticker: ticker }),
+    })
+      .then(function(res) { return res.json(); })
+      .then(function(data) {
+        if (data.error) {
+          appendLog('<span class="log-error">Error: ' + escapeHtml(data.error) + '</span>\n');
+          setRunning(false);
+          return;
+        }
+
+        currentRunId = data.run_id;
+        statusInfo.innerHTML = '<span class="val">' + escapeHtml(ticker) + '</span> — initializing';
+        appendSystemLog('Run ID: ' + data.run_id);
+
+        connectWebSocket(data.run_id);
+        startPolling(data.run_id);
+      })
+      .catch(function(err) {
+        appendLog('<span class="log-error">Request failed: ' + escapeHtml(String(err)) + '</span>\n');
+        setRunning(false);
+      });
+  }
+
+  // --- Event listeners ---
+  runBtn.addEventListener('click', run);
+
+  tickerInput.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      run();
+    }
+  });
+
+  // Auto-uppercase as user types
+  tickerInput.addEventListener('input', function() {
+    const pos = tickerInput.selectionStart;
+    tickerInput.value = tickerInput.value.toUpperCase();
+    tickerInput.selectionStart = pos;
+    tickerInput.selectionEnd = pos;
+  });
+
+  // Focus input on load
+  tickerInput.focus();
+})();
+</script>
+
+</body>
+</html>
