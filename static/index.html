@@ -37,8 +37,8 @@
       --red-glow:    0 0 10px rgba(255, 64, 96, 0.5);
 
       --text:        #dde8f8;
-      --text-mid:    #6a88aa;
-      --text-dim:    #2e4060;
+      --text-mid:    #8aaec8;
+      --text-dim:    #5a7898;
 
       --sidebar-w:   210px;
       --header-h:    50px;
@@ -820,9 +820,9 @@ function sra4() {
           const resp = await fetch(`/status/${run_id}`);
           if (!resp.ok) return;
           const data = await resp.json();
-          if (data.tasks) {
-            this.tasks = data.tasks.map(t => ({
-              id: t.task_id,
+          if (data.task_details) {
+            this.tasks = data.task_details.map(t => ({
+              id: t.id,
               state: t.status === 'complete' ? 'complete'
                    : t.status === 'running'  ? 'running'
                    : t.status === 'failed'   ? 'failed'

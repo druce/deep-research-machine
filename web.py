@@ -118,8 +118,8 @@ async def get_status(run_id: str):
         if proc.returncode == 0:
             data = json.loads(stdout.decode())
             # Sort tasks by sort_order from DAG YAML
-            if "tasks" in data:
-                data["tasks"].sort(key=lambda t: _sort_order.get(t.get("task_id", ""), 999))
+            if "task_details" in data:
+                data["task_details"].sort(key=lambda t: _sort_order.get(t.get("id", ""), 999))
             return data
     except Exception as e:
         import logging
