@@ -612,9 +612,9 @@
     <aside class="sidebar">
       <div class="sidebar-heading">Past Reports</div>
       <div class="sidebar-scroll">
-        <template x-for="r in reports" :key="r.id">
+        <template x-for="r in reports" :key="r.run_id">
           <div class="report-row" @click="openReport(r)">
-            <span class="report-sym" x-text="r.sym"></span>
+            <span class="report-sym" x-text="r.ticker"></span>
             <span class="report-date" x-text="r.date"></span>
             <span class="report-arrow">↗</span>
           </div>
