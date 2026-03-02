@@ -152,6 +152,10 @@ async def index():
 @app.websocket("/ws/{run_id}")
 async def websocket_log(ws: WebSocket, run_id: str):
     await ws.accept()
+    if not re.fullmatch(r"[A-Z]{1,10}_\d{8}", run_id):
+        await ws.send_json({"type": "error", "text": "invalid run_id"})
+        await ws.close()
+        return
     workdir = WORK_DIR / run_id
 
     # Wait up to 10s for workdir to appear (subprocess races with WS connect)
