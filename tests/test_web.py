@@ -127,3 +127,33 @@ async def test_status_endpoint_not_found(tmp_path, monkeypatch):
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.get("/status/FAKE_20260101")
     assert resp.status_code == 404
+
+
+@pytest.mark.anyio
+async def test_run_endpoint_rejects_invalid_ticker(tmp_path, monkeypatch):
+    """POST /run with invalid ticker format returns 400."""
+    import web
+    monkeypatch.setattr(web, "WORK_DIR", tmp_path)
+    from web import app
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.post("/run", json={"ticker": "../evil"})
+    assert resp.status_code == 400
+
+
+@pytest.mark.anyio
+async def test_run_endpoint_rejects_duplicate(tmp_path, monkeypatch):
+    """POST /run returns 409 when same run_id is already in progress."""
+    import web
+    monkeypatch.setattr(web, "WORK_DIR", tmp_path)
+
+    # Inject a fake running process with returncode=None (still running)
+    class FakeProc:
+        returncode = None
+
+    # Today's date is 2026-03-02, so run_id for ADSK will be ADSK_20260302
+    monkeypatch.setitem(web.running, "ADSK_20260302", FakeProc())
+
+    from web import app
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.post("/run", json={"ticker": "ADSK"})
+    assert resp.status_code == 409

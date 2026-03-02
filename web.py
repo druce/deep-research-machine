@@ -81,6 +81,8 @@ async def run_pipeline(body: dict):
     ticker = body.get("ticker", "").strip().upper()
     if not ticker:
         return JSONResponse({"error": "ticker required"}, status_code=400)
+    if not re.fullmatch(r"[A-Z]{1,10}", ticker):
+        return JSONResponse({"error": "invalid ticker"}, status_code=400)
 
     date = datetime.now().strftime("%Y%m%d")
     run_id = f"{ticker}_{date}"
@@ -100,28 +102,35 @@ async def run_pipeline(body: dict):
 
 @app.get("/status/{run_id}")
 async def get_status(run_id: str):
+    if not re.fullmatch(r"[A-Z]{1,10}_\d{8}", run_id):
+        return JSONResponse({"error": "invalid run_id"}, status_code=400)
     workdir = WORK_DIR / run_id
     if not workdir.exists():
         return JSONResponse({"error": "not found"}, status_code=404)
 
     try:
-        result = subprocess.run(
-            [sys.executable, str(DB_PY), "status", "--workdir", str(workdir)],
-            capture_output=True, text=True, timeout=5,
+        proc = await asyncio.create_subprocess_exec(
+            sys.executable, str(DB_PY), "status", "--workdir", str(workdir),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL,
         )
-        if result.returncode == 0:
-            data = json.loads(result.stdout)
+        stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=5.0)
+        if proc.returncode == 0:
+            data = json.loads(stdout.decode())
             # Sort tasks by sort_order from DAG YAML
             if "tasks" in data:
                 data["tasks"].sort(key=lambda t: _sort_order.get(t.get("task_id", ""), 999))
             return data
-    except Exception:
-        pass
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning("status query failed for %s: %s", run_id, e)
     return JSONResponse({"error": "status unavailable"}, status_code=500)
 
 
 @app.post("/open/{run_id}")
 async def open_report(run_id: str):
+    if not re.fullmatch(r"[A-Z]{1,10}_\d{8}", run_id):
+        return JSONResponse({"error": "invalid run_id"}, status_code=400)
     report = WORK_DIR / run_id / "artifacts" / "final_report.md"
     if not report.exists():
         return JSONResponse({"error": "report not found"}, status_code=404)
