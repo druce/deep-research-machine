@@ -103,6 +103,7 @@ class ShellConfig(BaseModel):
 class _TaskBase(BaseModel):
     """Common fields for all task types."""
     description: str
+    sort_order: int = 0
     depends_on: list[str] = []
     outputs: dict[str, OutputDef] = {}
     sets_vars: dict[str, SetsVarDef] = {}

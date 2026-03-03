@@ -188,10 +188,19 @@ def save_income_statement_sankey(
     #        Other Income (if positive) -> Pretax Income
     #        Pretax Income -> Taxes + Net Income
     nodes = []
+    node_colors = []
     links_source = []
     links_target = []
     links_value = []
     links_color = []
+
+    # Node color constants
+    CLR_BLUE = "rgba(31,119,180,0.8)"      # Revenue
+    CLR_GREEN = "rgba(80,180,80,0.8)"       # Profit / Income
+    CLR_ORANGE = "rgba(230,150,80,0.8)"     # Expenses
+    CLR_RED = "rgba(220,50,50,0.8)"         # Loss
+    CLR_TEAL = "rgba(80,180,160,0.8)"       # Other income
+    CLR_GRAY = "rgba(150,150,150,0.6)"      # Default
 
     def _fmt(v: float) -> str:
         """Format a dollar value for labels."""
@@ -204,9 +213,10 @@ def save_income_statement_sankey(
             return f"${av / 1e3:.1f}K"
         return f"${av:.0f}"
 
-    def add_node(name: str) -> int:
+    def add_node(name: str, color: str = CLR_GRAY) -> int:
         idx = len(nodes)
         nodes.append(name)
+        node_colors.append(color)
         return idx
 
     def add_link(src: int, tgt: int, value: float, color: str = "rgba(100,100,100,0.3)"):
@@ -217,9 +227,9 @@ def save_income_statement_sankey(
             links_color.append(color)
 
     # Node indices
-    n_revenue = add_node(f"Revenue {_fmt(total_revenue)}")
-    n_cogs = add_node(f"Cost of Revenue {_fmt(cost_of_revenue)}")
-    n_gross = add_node(f"Gross Profit {_fmt(gross_profit)}")
+    n_revenue = add_node(f"Revenue {_fmt(total_revenue)}", CLR_BLUE)
+    n_cogs = add_node(f"Cost of Revenue {_fmt(cost_of_revenue)}", CLR_ORANGE)
+    n_gross = add_node(f"Gross Profit {_fmt(gross_profit)}", CLR_GREEN)
 
     # Revenue -> COGS + Gross Profit
     add_link(n_revenue, n_cogs, cost_of_revenue, "rgba(255,100,100,0.4)")
@@ -228,31 +238,31 @@ def save_income_statement_sankey(
     # Gross Profit breakdown
     if selling_ga > 0 or research_dev > 0 or other_operating > 0:
         if selling_ga > 0:
-            n_sga = add_node(f"SG&A {_fmt(selling_ga)}")
+            n_sga = add_node(f"SG&A {_fmt(selling_ga)}", CLR_ORANGE)
             add_link(n_gross, n_sga, selling_ga, "rgba(255,150,100,0.4)")
         if research_dev > 0:
-            n_rd = add_node(f"R&D {_fmt(research_dev)}")
+            n_rd = add_node(f"R&D {_fmt(research_dev)}", CLR_ORANGE)
             add_link(n_gross, n_rd, research_dev, "rgba(255,180,100,0.4)")
         if other_operating > 0:
-            n_other_op = add_node(f"Other OpEx {_fmt(other_operating)}")
+            n_other_op = add_node(f"Other OpEx {_fmt(other_operating)}", CLR_ORANGE)
             add_link(n_gross, n_other_op, other_operating,
                      "rgba(255,200,100,0.4)")
     elif operating_expense > 0:
-        n_opex = add_node(f"Operating Expenses {_fmt(operating_expense)}")
+        n_opex = add_node(f"Operating Expenses {_fmt(operating_expense)}", CLR_ORANGE)
         add_link(n_gross, n_opex, operating_expense, "rgba(255,150,100,0.4)")
 
     if operating_income > 0:
-        n_opinc = add_node(f"Operating Income {_fmt(operating_income)}")
+        n_opinc = add_node(f"Operating Income {_fmt(operating_income)}", CLR_GREEN)
         add_link(n_gross, n_opinc, operating_income, "rgba(100,200,100,0.4)")
 
         # Operating Income -> Interest + Other Expense + Pretax Income
         if interest_expense > 0:
-            n_interest = add_node(f"Interest {_fmt(interest_expense)}")
+            n_interest = add_node(f"Interest {_fmt(interest_expense)}", CLR_ORANGE)
             add_link(n_opinc, n_interest, interest_expense,
                      "rgba(255,120,120,0.4)")
 
         if other_income < 0:
-            n_other_exp = add_node(f"Other Expense {_fmt(other_income)}")
+            n_other_exp = add_node(f"Other Expense {_fmt(other_income)}", CLR_ORANGE)
             add_link(n_opinc, n_other_exp, abs(other_income),
                      "rgba(255,140,140,0.4)")
 
@@ -261,49 +271,99 @@ def save_income_statement_sankey(
             pretax_income = operating_income - interest_expense + other_income
 
         if pretax_income > 0:
-            n_pretax = add_node(f"Pretax Income {_fmt(pretax_income)}")
+            n_pretax = add_node(f"Pretax Income {_fmt(pretax_income)}", CLR_GREEN)
             add_link(n_opinc, n_pretax, pretax_income, "rgba(100,180,140,0.4)")
 
             # Other income (positive) flows into pretax as additional source
             if other_income > 0:
-                n_other_inc = add_node(f"Other Income {_fmt(other_income)}")
+                n_other_inc = add_node(f"Other Income {_fmt(other_income)}", CLR_TEAL)
                 add_link(n_other_inc, n_pretax, other_income,
                          "rgba(100,200,180,0.4)")
 
             # Pretax Income -> Taxes + Net Income
             if tax_provision > 0:
-                n_tax = add_node(f"Taxes {_fmt(tax_provision)}")
+                n_tax = add_node(f"Taxes {_fmt(tax_provision)}", CLR_ORANGE)
                 add_link(n_pretax, n_tax, tax_provision,
                          "rgba(255,160,100,0.4)")
 
             if net_income > 0:
-                n_net = add_node(f"Net Income {_fmt(net_income)}")
+                n_net = add_node(f"Net Income {_fmt(net_income)}", CLR_GREEN)
                 add_link(n_pretax, n_net, net_income, "rgba(50,180,50,0.5)")
             elif net_income < 0:
-                n_net = add_node(f"Net Loss {_fmt(net_income)}")
+                n_net = add_node(f"Net Loss {_fmt(net_income)}", CLR_RED)
                 remaining = pretax_income - tax_provision
                 if remaining > 0:
                     add_link(n_pretax, n_net, remaining,
-                             "rgba(50,180,50,0.5)")
+                             "rgba(220,50,50,0.5)")
             else:
                 remaining = pretax_income - tax_provision
                 if remaining > 0:
-                    n_net = add_node(f"Net Income {_fmt(remaining)}")
+                    n_net = add_node(f"Net Income {_fmt(remaining)}", CLR_GREEN)
                     add_link(n_pretax, n_net, remaining,
                              "rgba(50,180,50,0.5)")
         elif pretax_income < 0:
-            # Pretax loss — show remaining operating income flowing out
-            n_pretax = add_node(f"Pretax Loss {_fmt(pretax_income)}")
+            # Pretax loss — show as red river
+            abs_pt = abs(pretax_income)
+            n_pretax = add_node(f"Pretax Loss {_fmt(pretax_income)}", CLR_RED)
             remaining = operating_income - interest_expense
             if other_income < 0:
                 remaining -= abs(other_income)
             if remaining > 0:
                 add_link(n_opinc, n_pretax, remaining,
                          "rgba(255,100,100,0.4)")
+            # Show net loss from pretax loss
+            if net_income < 0:
+                abs_ni = abs(net_income)
+                n_netloss = add_node(f"Net Loss {_fmt(net_income)}", CLR_RED)
+                if tax_provision > 0:
+                    n_tax = add_node(f"Taxes {_fmt(tax_provision)}", CLR_ORANGE)
+                    add_link(n_pretax, n_tax, tax_provision,
+                             "rgba(255,160,100,0.4)")
+                add_link(n_pretax, n_netloss, abs_ni, "rgba(200,30,30,0.6)")
 
     elif operating_income < 0:
-        # Operating loss — already captured by expense links above
-        add_node(f"Operating Loss {_fmt(operating_income)}")
+        # Operating loss — show as red river from Gross Profit
+        abs_oi = abs(operating_income)
+        n_oploss = add_node(f"Operating Loss {_fmt(operating_income)}", CLR_RED)
+        add_link(n_gross, n_oploss, abs_oi, "rgba(220,50,50,0.5)")
+
+        if net_income < 0:
+            abs_ni = abs(net_income)
+            n_netloss = add_node(f"Net Loss {_fmt(net_income)}", CLR_RED)
+
+            if abs_oi > abs_ni + 1e6:
+                # Non-operating items (interest income, etc.) reduced the loss
+                offset = abs_oi - abs_ni
+                n_offset = add_node(
+                    f"Interest/Other Income {_fmt(offset)}", CLR_TEAL)
+                add_link(n_oploss, n_offset, offset,
+                         "rgba(100,200,180,0.4)")
+                add_link(n_oploss, n_netloss, abs_ni,
+                         "rgba(200,30,30,0.6)")
+            elif abs_ni > abs_oi + 1e6:
+                # Non-operating items (interest expense, etc.) worsened the loss
+                additional = abs_ni - abs_oi
+                add_link(n_oploss, n_netloss, abs_oi,
+                         "rgba(200,30,30,0.6)")
+                n_extra = add_node(
+                    f"Interest/Other Charges {_fmt(additional)}", CLR_ORANGE)
+                add_link(n_extra, n_netloss, additional,
+                         "rgba(255,100,100,0.4)")
+            else:
+                # Approximately equal
+                add_link(n_oploss, n_netloss, abs_ni,
+                         "rgba(200,30,30,0.6)")
+        elif net_income > 0:
+            # Operating loss but net profit (large non-operating income)
+            n_netinc = add_node(f"Net Income {_fmt(net_income)}", CLR_GREEN)
+            total_recovery = abs_oi + net_income
+            n_recovery = add_node(
+                f"Interest/Other Income {_fmt(total_recovery)}", CLR_TEAL)
+            add_link(n_recovery, n_netinc, net_income,
+                     "rgba(50,180,50,0.5)")
+            # Operating loss absorbed by non-operating income
+            add_link(n_oploss, n_recovery, abs_oi,
+                     "rgba(100,200,180,0.4)")
 
     # Guard: if no links were created, bail out
     if not links_source:
@@ -328,9 +388,7 @@ def save_income_statement_sankey(
             thickness=25,
             line=dict(color="black", width=0.5),
             label=nodes,
-            color=[
-                "rgba(31,119,180,0.8)",   # Revenue - blue
-            ] + ["rgba(150,150,150,0.6)"] * (len(nodes) - 1),
+            color=node_colors,
         ),
         link=dict(
             source=links_source,

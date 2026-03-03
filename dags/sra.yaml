@@ -13,6 +13,7 @@ dag:
 tasks:
   # --- Data gathering tasks ---
   profile:
+    sort_order: 1
     description: Get company profile data based on symbol
     type: python
     config:
@@ -28,6 +29,7 @@ tasks:
       company_name: {artifact: "artifacts/profile.json", key: "company_name"}
 
   technical:
+    sort_order: 2
     description: Generate stock chart and technical indicators
     type: python
     depends_on: [profile]
@@ -41,6 +43,7 @@ tasks:
       technical_analysis: {path: "artifacts/technical_analysis.json", format: json, description: "Technical indicators: SMA, EMA, RSI, MACD, Bollinger Bands, ATR, OBV, support/resistance levels, and trend signals"}
 
   fundamental:
+    sort_order: 3
     description: Fetch financial statements, ratios, and analyst data
     type: python
     depends_on: [profile]
@@ -58,6 +61,7 @@ tasks:
       analyst_recommendations: {path: "artifacts/analyst_recommendations.json", format: json, description: "Wall Street analyst consensus: buy/hold/sell counts, price targets (low/mean/median/high), recent rating changes"}
 
   perplexity:
+    sort_order: 4
     description: Research news, business profile, and executives via Perplexity AI
     type: python
     depends_on: [profile]
@@ -72,6 +76,7 @@ tasks:
       executive_profiles: {path: "artifacts/executive_profiles.md", format: md, description: "Key executive bios: name, title, background, tenure, and notable achievements via Perplexity AI"}
 
   fetch_edgar:
+    sort_order: 5
     description: Fetch SEC filings (10-K, 10-Q, 8-K) via edgartools
     type: python
     depends_on: [profile]
@@ -88,6 +93,7 @@ tasks:
       8k_summary:    {path: "artifacts/8k_summary.json", format: json, description: "Recent 8-K current report summaries: material events, management changes, financial results announcements"}
 
   wikipedia:
+    sort_order: 6
     description: Fetch Wikipedia company summary
     type: python
     depends_on: [profile]
@@ -101,6 +107,7 @@ tasks:
       wikipedia_full:    {path: "artifacts/wikipedia_full.txt", format: txt, description: "Full Wikipedia article text with complete detail on company history, operations, and background"}
 
   perplexity_analysis:
+    sort_order: 7
     description: Generate business model, competitive, risk, and investment analysis via Perplexity
     type: python
     depends_on: [profile]
@@ -117,6 +124,7 @@ tasks:
 
   # --- Body section writing tasks (Claude subagents, run in parallel) ---
   write_profile:
+    sort_order: 8
     description: "Write Section 2: Extended Profile"
     type: claude
     depends_on: [profile, technical, fundamental, perplexity, fetch_edgar, wikipedia, perplexity_analysis]
@@ -195,6 +203,7 @@ tasks:
       section: {path: "artifacts/section_2_profile.md", format: md, description: "Section 2: Extended profile covering company history, core business, competitors, and recent news"}
 
   write_business_model:
+    sort_order: 9
     description: "Write Section 3: Business Model"
     type: claude
     depends_on: [profile, technical, fundamental, perplexity, fetch_edgar, wikipedia, perplexity_analysis]
@@ -279,6 +288,7 @@ tasks:
       section: {path: "artifacts/section_3_business_model.md", format: md, description: "Section 3: Business model analysis covering products, revenue streams, market characteristics, and competitive advantages"}
 
   write_competitive:
+    sort_order: 10
     description: "Write Section 4: Competitive Landscape"
     type: claude
     depends_on: [profile, technical, fundamental, perplexity, fetch_edgar, wikipedia, perplexity_analysis]
@@ -356,6 +366,7 @@ tasks:
       section: {path: "artifacts/section_4_competitive.md", format: md, description: "Section 4: Competitive landscape covering competitors, market share, differentiation, and growth trajectories"}
 
   write_supply_chain:
+    sort_order: 11
     description: "Write Section 5: Supply Chain Positioning"
     type: claude
     depends_on: [profile, technical, fundamental, perplexity, fetch_edgar, wikipedia, perplexity_analysis]
@@ -433,6 +444,7 @@ tasks:
       section: {path: "artifacts/section_5_supply_chain.md", format: md, description: "Section 5: Supply chain positioning covering upstream suppliers, downstream distribution, and key dependencies"}
 
   write_financial:
+    sort_order: 12
     description: "Write Section 6: Financial and Operating Leverage"
     type: claude
     depends_on: [profile, technical, fundamental, perplexity, fetch_edgar, wikipedia, perplexity_analysis]
@@ -512,6 +524,7 @@ tasks:
       section: {path: "artifacts/section_6_financial.md", format: md, description: "Section 6: Financial and operating leverage covering debt, margins, cash flow, and capital allocation"}
 
   write_valuation:
+    sort_order: 13
     description: "Write Section 7: Valuation"
     type: claude
     depends_on: [profile, technical, fundamental, perplexity, fetch_edgar, wikipedia, perplexity_analysis]
@@ -591,6 +604,7 @@ tasks:
       section: {path: "artifacts/section_7_valuation.md", format: md, description: "Section 7: Valuation analysis covering DCF, peer multiples, analyst ratings, and market characteristics"}
 
   write_risk_news:
+    sort_order: 14
     description: "Write Section 8: Recent Developments, News Search and Risk Factors"
     type: claude
     depends_on: [profile, technical, fundamental, perplexity, fetch_edgar, wikipedia, perplexity_analysis]
@@ -678,6 +692,7 @@ tasks:
       section: {path: "artifacts/section_8_risk_news.md", format: md, description: "Section 8: Recent developments, news, and risk factors from deep research"}
 
   assemble_body:
+    sort_order: 15
     description: Assemble the 7 body sections into a single report body
     type: python
     depends_on: [write_profile, write_business_model, write_competitive, write_supply_chain, write_financial, write_valuation, write_risk_news]
@@ -691,6 +706,7 @@ tasks:
       body_text: {path: "artifacts/assembled_body.md", format: md, description: "Assembled report body combining all 7 sections (2-8) into a single document"}
 
   write_conclusion:
+    sort_order: 16
     description: Write the main report conclusion
     type: claude
     depends_on: [assemble_body]
@@ -716,6 +732,7 @@ tasks:
       section: {path: "artifacts/conclusion.md", format: md, description: "Report conclusion: SWOT analysis, bull/bear cases, risk assessment, and monitoring watchpoints"}
 
   write_intro:
+    sort_order: 17
     description: Write the main report intro
     type: claude
     depends_on: [assemble_body, write_conclusion]
@@ -735,6 +752,7 @@ tasks:
       section: {path: "artifacts/intro.md", format: md, description: "Short introductory paragraph (<100 words) summarizing the report scope and key findings"}
 
   assemble_text:
+    sort_order: 18
     description: Assemble the 3 text sections into a complete report
     type: python
     depends_on: [write_intro, assemble_body, write_conclusion]
@@ -749,6 +767,7 @@ tasks:
       body_text: {path: "artifacts/report_body.md", format: md, description: "Assembled full report: intro + body sections 2-8 + conclusion in final markdown format"}
 
   critique_body_final:
+    sort_order: 19
     description: Critique the assembled report and identify issues to address
     type: claude
     depends_on: [assemble_text]
@@ -787,6 +806,7 @@ tasks:
       critique: {path: "artifacts/report_critique.md", format: md, description: "Numbered list of issues identified in the report with explanations and suggested fixes"}
 
   polish_body_final:
+    sort_order: 20
     description: Revise the report based on critique feedback
     type: claude
     depends_on: [critique_body_final]
@@ -825,6 +845,7 @@ tasks:
       final_report: {path: "artifacts/report_body_final.md", format: md, description: "Final polished report incorporating all critique feedback and revisions"}
 
   final_assembly:
+    sort_order: 21
     description: Assemble all report components into final formatted report using Jinja2 template
     type: python
     depends_on: [polish_body_final, technical, fundamental]

@@ -62,6 +62,7 @@ CREATE TABLE IF NOT EXISTS research (
 
 CREATE TABLE IF NOT EXISTS tasks (
     id            TEXT PRIMARY KEY,
+    sort_order    INTEGER DEFAULT 0,
     skill         TEXT NOT NULL,
     description   TEXT,
     params        TEXT NOT NULL,
@@ -198,9 +199,9 @@ def cmd_init(args: argparse.Namespace) -> None:
             params['sets_vars'] = {k: v.model_dump() for k, v in task.sets_vars.items()}
 
         conn.execute(
-            """INSERT INTO tasks (id, skill, description, params, concurrency)
-               VALUES (?, ?, ?, ?, ?)""",
-            (task_id, task.type, task.description, json.dumps(params), 'parallel')
+            """INSERT INTO tasks (id, sort_order, skill, description, params, concurrency)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (task_id, task.sort_order, task.type, task.description, json.dumps(params), 'parallel')
         )
         task_count += 1
 
@@ -465,7 +466,7 @@ def cmd_status(args: argparse.Namespace) -> None:
     task_rows = conn.execute("""
         SELECT t.id, t.status, t.summary, t.error,
                (SELECT COUNT(*) FROM artifacts a WHERE a.task_id = t.id) as artifact_count
-        FROM tasks t ORDER BY t.id
+        FROM tasks t ORDER BY t.sort_order, t.id
     """).fetchall()
 
     task_details = []
