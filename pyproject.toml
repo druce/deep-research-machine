@@ -13,6 +13,7 @@ dependencies = [
     "finnhub-python>=2.4.27",
     "ipykernel>=7.2.0",
     "kaleido>=1.2.0",
+    "lancedb>=0.29.2",
     "langchain>=1.2.10",
     "langchain-community>=0.4.1",
     "langchain-openai>=1.1.10",
