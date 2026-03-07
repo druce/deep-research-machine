@@ -99,6 +99,15 @@ CREATE TABLE IF NOT EXISTS dag_vars (
     source_task   TEXT REFERENCES tasks(id),
     created_at    TEXT DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS research_findings (
+    id          TEXT PRIMARY KEY,
+    task_id     TEXT NOT NULL REFERENCES tasks(id),
+    content     TEXT NOT NULL,
+    source      TEXT,
+    tags        TEXT NOT NULL DEFAULT '[]',
+    created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
 """
 
 
@@ -578,6 +587,55 @@ def cmd_var_get(args: argparse.Namespace) -> None:
         print(json.dumps(result))
 
 
+def cmd_finding_add(args: argparse.Namespace) -> None:
+    """Add a research finding tagged with section relevance."""
+    import uuid
+    conn = get_db(args.workdir)
+
+    row = conn.execute("SELECT id FROM tasks WHERE id = ?", (args.task_id,)).fetchone()
+    if not row:
+        conn.close()
+        error_exit(f"Task not found: {args.task_id}")
+
+    finding_id = str(uuid.uuid4())
+    tags = json.dumps(args.tags or [])
+    conn.execute(
+        """INSERT INTO research_findings (id, task_id, content, source, tags)
+           VALUES (?, ?, ?, ?, ?)""",
+        (finding_id, args.task_id, args.content, args.source, tags)
+    )
+    conn.commit()
+    conn.close()
+    print(json.dumps({"status": "ok", "id": finding_id}))
+
+
+def cmd_finding_list(args: argparse.Namespace) -> None:
+    """List research findings, optionally filtered by tags."""
+    conn = get_db(args.workdir)
+
+    rows = conn.execute(
+        "SELECT id, task_id, content, source, tags, created_at FROM research_findings ORDER BY created_at"
+    ).fetchall()
+
+    result = []
+    for row in rows:
+        tags = json.loads(row["tags"])
+        if args.tags:
+            if not any(t in tags for t in args.tags):
+                continue
+        result.append({
+            "id": row["id"],
+            "task_id": row["task_id"],
+            "content": row["content"],
+            "source": row["source"],
+            "tags": tags,
+            "created_at": row["created_at"],
+        })
+
+    conn.close()
+    print(json.dumps(result, indent=2))
+
+
 def cmd_task_context(args: argparse.Namespace) -> None:
     """Resolve dependency artifacts for a task."""
     conn = get_db(args.workdir)
@@ -732,6 +790,19 @@ def main() -> int:
     p_vget.add_argument('--workdir', required=True)
     p_vget.add_argument('--name', default=None, help='Variable name (omit for all)')
 
+    # finding-add
+    p_fadd = subparsers.add_parser('finding-add', help='Add a research finding')
+    p_fadd.add_argument('--workdir', required=True)
+    p_fadd.add_argument('--task-id', required=True, dest='task_id')
+    p_fadd.add_argument('--content', required=True)
+    p_fadd.add_argument('--source', default=None)
+    p_fadd.add_argument('--tags', nargs='*', default=[])
+
+    # finding-list
+    p_flist = subparsers.add_parser('finding-list', help='List research findings')
+    p_flist.add_argument('--workdir', required=True)
+    p_flist.add_argument('--tags', nargs='*', default=None)
+
     # validate
     p_validate = subparsers.add_parser('validate', help='Validate a DAG YAML file')
     p_validate.add_argument('--dag', default='dags/sra.yaml')
@@ -756,6 +827,8 @@ def main() -> int:
         'research-update': cmd_research_update,
         'var-set': cmd_var_set,
         'var-get': cmd_var_get,
+        'finding-add': cmd_finding_add,
+        'finding-list': cmd_finding_list,
         'validate': cmd_validate,
     }
 
