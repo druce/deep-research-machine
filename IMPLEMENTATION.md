@@ -141,6 +141,15 @@ CREATE TABLE dag_vars (
     source_task   TEXT REFERENCES tasks(id), -- task that produced it (nullable)
     created_at    TEXT DEFAULT (datetime('now'))
 );
+
+CREATE TABLE research_findings (
+    id            TEXT PRIMARY KEY,        -- UUID
+    task_id       TEXT NOT NULL REFERENCES tasks(id),
+    content       TEXT NOT NULL,           -- finding text
+    source        TEXT,                    -- where it came from
+    tags          TEXT NOT NULL DEFAULT '[]',  -- JSON array of section tags
+    created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+);
 ```
 
 **Commands (implemented):**
@@ -154,6 +163,8 @@ CREATE TABLE dag_vars (
 | `task-update --workdir W --task-id T --status S [--summary S] [--error E]` | Update task state |
 | `artifact-add --workdir W --task-id T --name N --path P --format F [--description D] [--source S] [--summary S]` | Register artifact |
 | `artifact-list --workdir W [--task T]` | List artifacts as JSON (includes description field) |
+| `finding-add --workdir W --task-id T --content C --source S [--tags T1 T2]` | Add a research finding with section tags |
+| `finding-list --workdir W [--tags T1 T2]` | List findings, optionally filtered by tags |
 | `status --workdir W` | Overview: research status, all tasks, artifact counts |
 | `research-update --workdir W --status S` | Update overall research status (not started\|running\|complete\|failed) |
 | `var-set --workdir W --name N --value V [--source-task T]` | Set a runtime DAG variable (upsert) |
@@ -221,91 +232,24 @@ The default DAG. Defines all tasks with typed configs, dependencies, expected ou
 
 **`outputs.description` field:** Each output includes a `description` string providing static metadata about the artifact's contents. This helps downstream tasks understand what data is available without reading the file.
 
-The authoritative DAG is `dags/sra.yaml`. Condensed structure (showing one example of each type):
+The authoritative DAG is `dags/sra.yaml`. Current structure (32 tasks):
 
-```yaml
-dag:
-  version: 2
-  name: Equity Research Report Bot
-  inputs:
-    ticker: "${ticker}"
-    workdir: "${workdir}"
-  root_dir: /Users/drucev/projects/sra5
-  template_dir: templates
-
-tasks:
-  # --- Data gathering (type: python) ---
-  profile:
-    description: Get company profile data based on symbol
-    type: python
-    config:
-      script: skills/fetch_profile/fetch_profile.py
-      args:
-        ticker: "${ticker}"
-        workdir: "${workdir}"
-    outputs:
-      profile:    {path: "artifacts/profile.json", format: json, description: "Company identity and valuation snapshot"}
-      peers_list: {path: "artifacts/peers_list.json", format: json, description: "Peer companies with symbol, name, price, market cap"}
-    sets_vars:
-      symbol:       {artifact: "artifacts/profile.json", key: "symbol"}
-      company_name: {artifact: "artifacts/profile.json", key: "company_name"}
-
-  technical:
-    description: Generate stock chart and technical indicators
-    type: python
-    depends_on: [profile]
-    config:
-      script: skills/fetch_technical/fetch_technical.py
-      args: {ticker: "${ticker}", workdir: "${workdir}"}
-    outputs:
-      chart:              {path: "artifacts/chart.png", format: png, description: "1-year price chart with SMA, volume, RSI, MACD"}
-      technical_analysis: {path: "artifacts/technical_analysis.json", format: json, description: "Technical indicators and trend signals"}
-
-  # fundamental, perplexity, fetch_edgar, wikipedia, perplexity_analysis — all type: python, depends_on: [profile]
-
-  # --- Body writing (type: claude) ---
-  write_body:
-    description: Write the main report body (sections 2-8)
-    type: claude
-    depends_on: [profile, technical, fundamental, perplexity, fetch_edgar, wikipedia, perplexity_analysis]
-    config:
-      system: "You are a senior equity research analyst writing a professional report."
-      tools: all
-      prompt: |
-        Write a comprehensive report on ${ticker} covering sections 2-8:
-        Extended Profile, Business Model, Competitive Landscape, Supply Chain,
-        Financial Leverage, Valuation, and Risk Factors...
-    outputs:
-      section: {path: "artifacts/draft_report_body.md", format: md, description: "Draft report body sections 2-8"}
-
-  write_conclusion:
-    depends_on: [write_body]
-    # ...
-
-  write_intro:
-    depends_on: [write_body, write_conclusion]
-    # ...
-
-  # --- Assembly + Critique + Polish ---
-  assemble_text:
-    type: python
-    depends_on: [write_intro, write_body, write_conclusion]
-    # ...
-
-  critique_body_final:
-    type: claude
-    depends_on: [assemble_text]
-    # ...
-
-  polish_body_final:
-    type: claude
-    depends_on: [critique_body_final]
-    # ...
-
-  final_assembly:
-    type: python
-    depends_on: [polish_body_final, technical, fundamental]
-    # ...
+```
+Wave 1:  profile (no deps)
+Wave 2:  technical, fundamental, perplexity, fetch_edgar, wikipedia, perplexity_analysis (depend on profile)
+Wave 3:  chunk_documents → tag_chunks → build_index (chunk/tag/index text artifacts into LanceDB)
+Wave 4:  7x research_* tasks in parallel (depend on build_index + relevant data tasks)
+           - Query index via search_index.py
+           - Use MCP tools (proxy caches responses, tracks requestor task IDs)
+           - Record findings via finding-add with section tags
+Wave 5:  index_research (reads MCP cache + findings, chunks/embeds/tags, appends to LanceDB)
+Wave 6:  7x write_* tasks in parallel (depend on index_research + data tasks)
+           - Query unified LanceDB index via search_index.py
+           - Critic-optimizer loop (n_iterations: 1)
+Wave 7:  assemble_body (concatenate 7 sections)
+Wave 8:  write_conclusion → write_intro
+Wave 9:  assemble_text
+Wave 10: critique_body_final → polish_body_final → final_assembly
 ```
 
 **Pydantic schema models** (`skills/schema.py`):
@@ -503,11 +447,11 @@ Not currently used in the default DAG but supported for extensibility.
 
 ---
 
-- [ ] Write `skills/taskrunner.md` skill definition
-- [ ] Implement `python` type dispatch with arg conversion and exit code mapping
-- [ ] Implement `claude` type dispatch: critic-loop (GATHER → DRAFT → CRITIQUE → REVISE) and simple patterns
+- [x] ~~Write `skills/taskrunner.md` skill definition~~ — replaced by `research.py` async orchestrator
+- [x] Implement `python` type dispatch with arg conversion and exit code mapping (in `research.py`)
+- [x] Implement `claude` type dispatch with critic-optimizer loop (in `research.py`)
 - [ ] Implement `shell` type dispatch
-- [ ] Verify artifact registration uses `db.py artifact-add` for every produced file
+- [x] Verify artifact registration uses `db.py artifact-add` for every produced file
 
 ### Step 2.2: Build `skills/research.md`
 
@@ -649,11 +593,11 @@ Run ./skills/db.py status --workdir work/TSLA_20260222 for full details
 
 ---
 
-- [ ] Write `skills/research.md` skill definition
-- [ ] Implement Phase 1 INTAKE: ticker validation, DAG presentation format, conversational edit flow
-- [ ] Implement Phase 2 INIT: `db.py init` + `research-update --status running`
-- [ ] Implement Phase 3 DAG LOOP: parallel dispatch, stale task retry, deadlock detection, iteration summary format
-- [ ] Implement Phase 4 COMPLETION: `research-update --status complete` + final summary output
+- [x] ~~Write `skills/research.md` skill definition~~ — replaced by `research.py` async Python orchestrator
+- [x] Implement Phase 1 INTAKE: ticker validation, workdir creation (in `research.py init_pipeline()`)
+- [x] Implement Phase 2 INIT: `db.py init` + `research-update --status running` (in `research.py`)
+- [x] Implement Phase 3 DAG LOOP: parallel dispatch via asyncio (in `research.py`)
+- [x] Implement Phase 4 COMPLETION: `research-update --status complete` + final summary output
 
 ### Step 2.3: Build `skills/assemble.py`
 
@@ -673,9 +617,9 @@ rendered = jinja_env.get_template(template).render(context)
 write(workdir / "research_report.md", rendered)
 ```
 
-- [ ] Implement `assemble.py`
-- [ ] Handle missing sections gracefully (note gaps in output)
-- [ ] Print JSON manifest to stdout (consistent with script contract)
+- [x] ~~Implement `assemble.py`~~ — handled by `assemble_body` and `assemble_text` tasks in DAG using Jinja templates
+- [x] Handle missing sections gracefully
+- [x] Print JSON manifest to stdout
 
 ---
 
@@ -782,6 +726,78 @@ Existing CLI: `symbol --work-dir`
 
 ---
 
+## Phase 3b: Chunk → Index → Search Pipeline
+
+**Implemented.** Three-step pipeline converting text artifacts into a searchable LanceDB index.
+
+### Step 3b.1: `chunk_documents.py`
+
+Splits `.md`/`.txt` artifacts into paragraph-boundary chunks (~600–800 tokens), embeds via OpenAI `text-embedding-3-small` (1536-dim).
+
+- [x] Create `skills/chunk_index/chunk_documents.py`
+- [x] Paragraph-boundary chunking with greedy accumulation
+- [x] Batched OpenAI embedding
+- [x] Document type inference from filenames
+- [x] Tests in `tests/test_chunk_documents.py`
+
+### Step 3b.2: `build_index.py`
+
+Merges `chunks.json` + `chunk_tags.json` into a LanceDB table with vector + FTS indexes.
+
+- [x] Create `skills/chunk_index/build_index.py`
+- [x] PyArrow schema: `{id, text, source, doc_type, tags, vector}`
+- [x] BM25 full-text search index on text column
+- [x] Tests in `tests/test_search_index.py`
+
+### Step 3b.3: `search_index.py`
+
+Hybrid vector + BM25 search with reciprocal rank fusion. Used by research agents and writers.
+
+- [x] Create `skills/search_index/search_index.py`
+- [x] Section tag filtering via `--sections`
+- [x] Configurable `--top-k`
+
+### Step 3b.4: MCP Caching Proxy
+
+SQLite-backed cache for MCP tool calls, with requestor tracking per task.
+
+- [x] Create `skills/mcp_proxy/mcp_proxy.py`
+- [x] Cache key: SHA256 of `tool_name|arguments_json`
+- [x] `requestors` column tracking which research tasks requested each result
+- [x] `MCP_TASK_ID` env var passed from orchestrator (`research.py`)
+- [x] Schema migration for existing databases (idempotent ALTER TABLE)
+- [x] Tests in `tests/test_mcp_proxy.py`
+
+### Step 3b.5: Research Agents (7 parallel)
+
+Claude tasks that query the LanceDB index, use MCP tools, and record findings.
+
+- [x] Add `research_profile`, `research_business`, `research_competitive`, `research_supply_chain`, `research_financial`, `research_valuation`, `research_risk_news` to DAG
+- [x] Each depends on `build_index` + relevant data tasks
+- [x] MCP config via `mcp-research.json`
+- [x] Findings stored via `db.py finding-add` with section tags
+
+### Step 3b.6: `index_research.py`
+
+Post-research batch task: reads MCP cache + research findings, chunks/embeds/tags, appends to existing LanceDB index.
+
+- [x] Create `skills/chunk_index/index_research.py`
+- [x] Extract text from MCP `TextContent` blocks (skip short/numeric responses)
+- [x] Tag derivation from requestor task IDs via `TASK_TO_SECTION` mapping
+- [x] Findings converted to chunks directly (already short enough)
+- [x] Append to existing LanceDB table + rebuild FTS index
+- [x] Tests in `tests/test_index_research.py`
+
+### Step 3b.7: Unified Writer Retrieval
+
+Writers query ONE source (unified LanceDB index) instead of two separate paths.
+
+- [x] Writer `depends_on` updated to `[index_research, ...]` (replaces individual `research_*` deps)
+- [x] Writer prompts updated: `search_index.py` replaces `db.py finding-list`
+- [x] `index_research` transitively depends on all `research_*` tasks
+
+---
+
 ## Phase 4: Templates
 
 ### Step 4.1: Create simplified assembly template
@@ -804,14 +820,9 @@ New template that iterates pre-written sections — much simpler than the existi
 *Generated by Stock Research Agent*
 ```
 
-- [ ] Create `templates/equity_research_report.md.j2`
-
-### Step 4.2: Copy existing templates as alternatives
-
-Copy from `../stock_research_agent/templates/` for users who want the structured format with hardcoded sections and detailed variable interpolation.
-
-- [ ] Copy `equity_research_report.md.j2` → `templates/detailed_report.md.j2`
-- [ ] Copy `final_report.md.j2` → `templates/final_report.md.j2`
+- [x] Create `templates/assemble_body.md.j2` — body section assembly
+- [x] Create `templates/assemble_report.md.j2` — full report assembly
+- [x] Create `templates/final_report.md.j2` — final formatted report
 
 ---
 
@@ -891,15 +902,25 @@ Project instructions for Claude Code:
 
 | File | Phase | Status | Purpose |
 |------|-------|--------|---------|
-| `skills/db.py` | 1.2 | **Done** | SQLite CLI — init, validate, task-ready, task-get, task-update, artifact-add/list, var-set/var-get, status, research-update |
+| `skills/db.py` | 1.2 | **Done** | SQLite CLI — init, validate, task-ready, task-get, task-update, artifact-add/list, finding-add/list, var-set/var-get, status, research-update |
 | `skills/schema.py` | 1.2 | **Done** | Pydantic models for DAG YAML v2 schema (OutputDef with description, SetsVarDef, typed task configs) |
-| `dags/sra.yaml` | 1.4 | **Done** | Default DAG for equity research (v2 schema, output descriptions, sets_vars) |
+| `dags/sra.yaml` | 1.4 | **Done** | Default DAG for equity research (32 tasks, v2 schema) |
 | `tests/test_schema.py` | 1.2 | **Done** | Schema validation tests |
-| `tests/test_db.py` | 1.2 | **Done** | db.py command tests (90 tests total) |
-| `skills/taskrunner.md` | 2.1 | TODO | Claude Code skill: dispatch a single task by type (python, claude, shell) |
-| `skills/research.md` | 2.2 | TODO | Claude Code skill: intake + DAG runner loop (4 phases) |
-| `skills/assemble_text.py` | 2.3 | TODO | Read sections, assemble complete report |
-| `templates/equity_research_report.md.j2` | 4.1 | TODO | Simplified section-iteration template |
+| `tests/test_db.py` | 1.2 | **Done** | db.py command tests |
+| `research.py` | 2.1–2.2 | **Done** | Async DAG orchestrator (replaces planned taskrunner.md + research.md skills) |
+| `skills/chunk_index/chunk_documents.py` | 3b.1 | **Done** | Split text artifacts into chunks, embed via OpenAI |
+| `skills/chunk_index/build_index.py` | 3b.2 | **Done** | Build LanceDB hybrid index from chunks + tags |
+| `skills/chunk_index/index_research.py` | 3b.6 | **Done** | Append MCP cache responses + research findings to LanceDB index |
+| `skills/search_index/search_index.py` | 3b.3 | **Done** | Hybrid vector + BM25 search over LanceDB index |
+| `skills/mcp_proxy/mcp_proxy.py` | 3b.4 | **Done** | MCP caching proxy with requestor tracking |
+| `tests/test_chunk_documents.py` | 3b.1 | **Done** | Chunking + embedding tests |
+| `tests/test_search_index.py` | 3b.2 | **Done** | Build index + search tests |
+| `tests/test_index_research.py` | 3b.6 | **Done** | Post-research indexing tests |
+| `tests/test_mcp_proxy.py` | 3b.4 | **Done** | MCP proxy unit + integration tests |
+| `tests/test_research_invoke.py` | 2.1 | **Done** | Orchestrator invocation tests |
+| `templates/assemble_body.md.j2` | 4 | **Done** | Body assembly template |
+| `templates/assemble_report.md.j2` | 4 | **Done** | Full report assembly template |
+| `templates/final_report.md.j2` | 4 | **Done** | Final formatted report template |
 | `CLAUDE.md` | 5.1 | **Done** | Project instructions for Claude Code |
 
 ### Files copied and adapted from `../stock_research_agent/skills/`
@@ -917,11 +938,11 @@ Project instructions for Claude Code:
 | `fetch_wikipedia/fetch_wikipedia.py` | 3.6 | **Done** | Add manifest |
 | `fetch_perplexity_analysis/fetch_perplexity_analysis.py` | 3.7 | **Done** | Add manifest, discover artifacts from workdir |
 
-### Files NOT migrated (replaced by Claude Code skills)
+### Files NOT migrated (replaced by new architecture)
 
 | Old File | Replaced By |
 |----------|-------------|
-| `research_stock.py` | `/research` skill (DAG runner) |
-| `research_report.py` | `assemble.py` + `claude` type tasks |
-| `research_final.py` | `claude` type polish task |
-| `research_deep.py` | `claude` type writer tasks (they ARE Claude) |
+| `research_stock.py` | `research.py` async orchestrator |
+| `research_report.py` | `templates/*.md.j2` + `assemble_body`/`assemble_text` tasks |
+| `research_final.py` | `critique_body_final` → `polish_body_final` → `final_assembly` tasks |
+| `research_deep.py` | 7 `research_*` Claude tasks + 7 `write_*` Claude tasks |

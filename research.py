@@ -382,7 +382,7 @@ async def run_claude_task(task: dict, workdir: Path) -> dict:
 
     # Resolve mcp_config and extra_env
     task_mcp_config = params.get("mcp_config") or None
-    task_extra_env = {"MCP_CACHE_WORKDIR": str(workdir)} if task_mcp_config else None
+    task_extra_env = {"MCP_CACHE_WORKDIR": str(workdir), "MCP_TASK_ID": task["id"]} if task_mcp_config else None
 
     # Step 1: Initial write
     result = await _invoke_claude(

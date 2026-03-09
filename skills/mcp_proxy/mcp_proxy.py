@@ -31,12 +31,13 @@ from mcp.client.stdio import stdio_client, StdioServerParameters
 
 CACHE_SCHEMA = """
 CREATE TABLE IF NOT EXISTS mcp_cache (
-  cache_key  TEXT PRIMARY KEY,
-  server     TEXT NOT NULL,
-  tool_name  TEXT NOT NULL,
-  arguments  TEXT NOT NULL,
-  result     TEXT NOT NULL,
-  created_at TEXT NOT NULL
+  cache_key   TEXT PRIMARY KEY,
+  server      TEXT NOT NULL,
+  tool_name   TEXT NOT NULL,
+  arguments   TEXT NOT NULL,
+  result      TEXT NOT NULL,
+  requestors  TEXT NOT NULL DEFAULT '[]',
+  created_at  TEXT NOT NULL
 );
 """
 
@@ -54,6 +55,12 @@ def open_cache(workdir: str | None) -> sqlite3.Connection | None:
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.executescript(CACHE_SCHEMA)
+    # Migration: add requestors column to existing databases
+    try:
+        conn.execute("ALTER TABLE mcp_cache ADD COLUMN requestors TEXT NOT NULL DEFAULT '[]'")
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass  # Column already exists
     conn.commit()
     return conn
 
@@ -87,23 +94,34 @@ async def run_proxy(args: argparse.Namespace) -> None:
             async def call_tool(name: str, arguments: dict | None = None):
                 arguments = arguments or {}
                 key = make_cache_key(name, arguments)
+                task_id = os.environ.get("MCP_TASK_ID", "unknown")
 
                 if cache_conn:
                     row = cache_conn.execute(
-                        "SELECT result FROM mcp_cache WHERE cache_key = ?", (key,)
+                        "SELECT result, requestors FROM mcp_cache WHERE cache_key = ?", (key,)
                     ).fetchone()
                     if row:
+                        # Update requestors list if this task_id is new
+                        requestors = json.loads(row["requestors"])
+                        if task_id not in requestors:
+                            requestors.append(task_id)
+                            cache_conn.execute(
+                                "UPDATE mcp_cache SET requestors = ? WHERE cache_key = ?",
+                                (json.dumps(requestors), key)
+                            )
+                            cache_conn.commit()
                         return json.loads(row["result"])
 
                 result = await session.call_tool(name, arguments)
 
                 if cache_conn:
                     cache_conn.execute(
-                        "INSERT OR REPLACE INTO mcp_cache VALUES (?, ?, ?, ?, ?, ?)",
+                        "INSERT OR REPLACE INTO mcp_cache VALUES (?, ?, ?, ?, ?, ?, ?)",
                         (
                             key, server_label, name,
                             json.dumps(arguments, sort_keys=True),
                             json.dumps(result, default=str),
+                            json.dumps([task_id]),
                             datetime.now(timezone.utc).isoformat(),
                         )
                     )

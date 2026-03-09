@@ -339,12 +339,28 @@ tasks:
         Aim for at least 10 substantial findings.
       disallowed_tools: [WebSearch, WebFetch]
 
+  # --- Post-research indexing ---
+  index_research:
+    sort_order: 19
+    description: Index MCP responses and research findings into LanceDB
+    type: python
+    depends_on: [build_index, research_profile, research_business, research_competitive,
+                 research_supply_chain, research_financial, research_valuation, research_risk_news]
+    config:
+      script: skills/chunk_index/index_research.py
+      args:
+        ticker: "${ticker}"
+        workdir: "${workdir}"
+    outputs:
+      research_index: {path: "artifacts/index/", format: lancedb,
+                       description: "LanceDB index enriched with research MCP responses and findings"}
+
   # --- Body section writing tasks (Claude subagents, run in parallel) ---
   write_profile:
     sort_order: 20
     description: "Write Section 2: Extended Profile"
     type: claude
-    depends_on: [profile, technical, fundamental, perplexity, fetch_edgar, wikipedia, perplexity_analysis, research_profile, research_business, research_competitive, research_supply_chain, research_financial, research_valuation, research_risk_news]
+    depends_on: [index_research, profile, technical, fundamental, perplexity, fetch_edgar, wikipedia, perplexity_analysis]
     config:
       system: "You are a senior equity research analyst writing a professional report. Read and follow the style guide at ../../STYLE.md."
       disallowed_tools: [WebSearch, WebFetch, Agent, Skill, Bash, yfinance, alphavantage, brave-search, perplexity-ask, wikipedia, playwright, fetch, filesystem]
@@ -361,13 +377,11 @@ tasks:
         - artifacts/news_stories.md
         - artifacts/8k_summary.json
       prompt: |
-        Before writing, retrieve research findings for your section:
-          Run: uv run python skills/db.py finding-list --workdir ${workdir} --tags profile
-
-        Use these findings as your primary source. They were produced by specialist
-        research agents and include cross-tagged evidence from other domains.
-        Fall back to artifact files in artifacts/ for specific data and citations.
-        Do not call external tools or APIs — focus on synthesis from research findings.
+        Before writing, search the unified research index for all relevant material:
+          Run: uv run python skills/search_index/search_index.py "company profile history overview" --workdir ${workdir} --sections profile --top-k 25
+        This index contains all data artifacts, MCP research responses, and research findings.
+        Use these results as your primary source alongside the inline artifacts above.
+        Do not call external tools or APIs — focus on synthesis from provided data.
 
         ---
 
@@ -433,7 +447,7 @@ tasks:
     sort_order: 20
     description: "Write Section 3: Business Model"
     type: claude
-    depends_on: [profile, technical, fundamental, perplexity, fetch_edgar, wikipedia, perplexity_analysis, research_profile, research_business, research_competitive, research_supply_chain, research_financial, research_valuation, research_risk_news]
+    depends_on: [index_research, profile, technical, fundamental, perplexity, fetch_edgar, wikipedia, perplexity_analysis]
     config:
       system: "You are a senior equity research analyst writing a professional report. Read and follow the style guide at ../../STYLE.md."
       disallowed_tools: [WebSearch, WebFetch, Agent, Skill, Bash, yfinance, alphavantage, brave-search, perplexity-ask, wikipedia, playwright, fetch, filesystem]
@@ -450,13 +464,11 @@ tasks:
         - artifacts/news_stories.md
         - artifacts/8k_summary.json
       prompt: |
-        Before writing, retrieve research findings for your section:
-          Run: uv run python skills/db.py finding-list --workdir ${workdir} --tags business_model
-
-        Use these findings as your primary source. They were produced by specialist
-        research agents and include cross-tagged evidence from other domains.
-        Fall back to artifact files in artifacts/ for specific data and citations.
-        Do not call external tools or APIs — focus on synthesis from research findings.
+        Before writing, search the unified research index for all relevant material:
+          Run: uv run python skills/search_index/search_index.py "business model revenue streams products services" --workdir ${workdir} --sections business_model --top-k 25
+        This index contains all data artifacts, MCP research responses, and research findings.
+        Use these results as your primary source alongside the inline artifacts above.
+        Do not call external tools or APIs — focus on synthesis from provided data.
 
         ---
 
@@ -528,7 +540,7 @@ tasks:
     sort_order: 20
     description: "Write Section 4: Competitive Landscape"
     type: claude
-    depends_on: [profile, technical, fundamental, perplexity, fetch_edgar, wikipedia, perplexity_analysis, research_profile, research_business, research_competitive, research_supply_chain, research_financial, research_valuation, research_risk_news]
+    depends_on: [index_research, profile, technical, fundamental, perplexity, fetch_edgar, wikipedia, perplexity_analysis]
     config:
       system: "You are a senior equity research analyst writing a professional report. Read and follow the style guide at ../../STYLE.md."
       disallowed_tools: [WebSearch, WebFetch, Agent, Skill, Bash, yfinance, alphavantage, brave-search, perplexity-ask, wikipedia, playwright, fetch, filesystem]
@@ -545,13 +557,11 @@ tasks:
         - artifacts/news_stories.md
         - artifacts/8k_summary.json
       prompt: |
-        Before writing, retrieve research findings for your section:
-          Run: uv run python skills/db.py finding-list --workdir ${workdir} --tags competitive
-
-        Use these findings as your primary source. They were produced by specialist
-        research agents and include cross-tagged evidence from other domains.
-        Fall back to artifact files in artifacts/ for specific data and citations.
-        Do not call external tools or APIs — focus on synthesis from research findings.
+        Before writing, search the unified research index for all relevant material:
+          Run: uv run python skills/search_index/search_index.py "competitors market share competitive landscape" --workdir ${workdir} --sections competitive --top-k 25
+        This index contains all data artifacts, MCP research responses, and research findings.
+        Use these results as your primary source alongside the inline artifacts above.
+        Do not call external tools or APIs — focus on synthesis from provided data.
 
         ---
 
@@ -616,7 +626,7 @@ tasks:
     sort_order: 20
     description: "Write Section 5: Supply Chain Positioning"
     type: claude
-    depends_on: [profile, technical, fundamental, perplexity, fetch_edgar, wikipedia, perplexity_analysis, research_profile, research_business, research_competitive, research_supply_chain, research_financial, research_valuation, research_risk_news]
+    depends_on: [index_research, profile, technical, fundamental, perplexity, fetch_edgar, wikipedia, perplexity_analysis]
     config:
       system: "You are a senior equity research analyst writing a professional report. Read and follow the style guide at ../../STYLE.md."
       disallowed_tools: [WebSearch, WebFetch, Agent, Skill, Bash, yfinance, alphavantage, brave-search, perplexity-ask, wikipedia, playwright, fetch, filesystem]
@@ -633,13 +643,11 @@ tasks:
         - artifacts/news_stories.md
         - artifacts/8k_summary.json
       prompt: |
-        Before writing, retrieve research findings for your section:
-          Run: uv run python skills/db.py finding-list --workdir ${workdir} --tags supply_chain
-
-        Use these findings as your primary source. They were produced by specialist
-        research agents and include cross-tagged evidence from other domains.
-        Fall back to artifact files in artifacts/ for specific data and citations.
-        Do not call external tools or APIs — focus on synthesis from research findings.
+        Before writing, search the unified research index for all relevant material:
+          Run: uv run python skills/search_index/search_index.py "supply chain suppliers manufacturing dependencies" --workdir ${workdir} --sections supply_chain --top-k 25
+        This index contains all data artifacts, MCP research responses, and research findings.
+        Use these results as your primary source alongside the inline artifacts above.
+        Do not call external tools or APIs — focus on synthesis from provided data.
 
         ---
 
@@ -704,7 +712,7 @@ tasks:
     sort_order: 20
     description: "Write Section 6: Financial and Operating Leverage"
     type: claude
-    depends_on: [profile, technical, fundamental, perplexity, fetch_edgar, wikipedia, perplexity_analysis, research_profile, research_business, research_competitive, research_supply_chain, research_financial, research_valuation, research_risk_news]
+    depends_on: [index_research, profile, technical, fundamental, perplexity, fetch_edgar, wikipedia, perplexity_analysis]
     config:
       system: "You are a senior equity research analyst writing a professional report. Read and follow the style guide at ../../STYLE.md."
       disallowed_tools: [WebSearch, WebFetch, Agent, Skill, Bash, yfinance, alphavantage, brave-search, perplexity-ask, wikipedia, playwright, fetch, filesystem]
@@ -721,13 +729,11 @@ tasks:
         - artifacts/news_stories.md
         - artifacts/8k_summary.json
       prompt: |
-        Before writing, retrieve research findings for your section:
-          Run: uv run python skills/db.py finding-list --workdir ${workdir} --tags financial
-
-        Use these findings as your primary source. They were produced by specialist
-        research agents and include cross-tagged evidence from other domains.
-        Fall back to artifact files in artifacts/ for specific data and citations.
-        Do not call external tools or APIs — focus on synthesis from research findings.
+        Before writing, search the unified research index for all relevant material:
+          Run: uv run python skills/search_index/search_index.py "financial leverage margins cash flow capital allocation" --workdir ${workdir} --sections financial --top-k 25
+        This index contains all data artifacts, MCP research responses, and research findings.
+        Use these results as your primary source alongside the inline artifacts above.
+        Do not call external tools or APIs — focus on synthesis from provided data.
 
         ---
 
@@ -794,7 +800,7 @@ tasks:
     sort_order: 20
     description: "Write Section 7: Valuation"
     type: claude
-    depends_on: [profile, technical, fundamental, perplexity, fetch_edgar, wikipedia, perplexity_analysis, research_profile, research_business, research_competitive, research_supply_chain, research_financial, research_valuation, research_risk_news]
+    depends_on: [index_research, profile, technical, fundamental, perplexity, fetch_edgar, wikipedia, perplexity_analysis]
     config:
       system: "You are a senior equity research analyst writing a professional report. Read and follow the style guide at ../../STYLE.md."
       disallowed_tools: [WebSearch, WebFetch, Agent, Skill, Bash, yfinance, alphavantage, brave-search, perplexity-ask, wikipedia, playwright, fetch, filesystem]
@@ -811,13 +817,11 @@ tasks:
         - artifacts/news_stories.md
         - artifacts/8k_summary.json
       prompt: |
-        Before writing, retrieve research findings for your section:
-          Run: uv run python skills/db.py finding-list --workdir ${workdir} --tags valuation
-
-        Use these findings as your primary source. They were produced by specialist
-        research agents and include cross-tagged evidence from other domains.
-        Fall back to artifact files in artifacts/ for specific data and citations.
-        Do not call external tools or APIs — focus on synthesis from research findings.
+        Before writing, search the unified research index for all relevant material:
+          Run: uv run python skills/search_index/search_index.py "valuation P/E EV/EBITDA price target DCF multiples" --workdir ${workdir} --sections valuation --top-k 25
+        This index contains all data artifacts, MCP research responses, and research findings.
+        Use these results as your primary source alongside the inline artifacts above.
+        Do not call external tools or APIs — focus on synthesis from provided data.
 
         ---
 
@@ -884,7 +888,7 @@ tasks:
     sort_order: 20
     description: "Write Section 8: Recent Developments, News Search and Risk Factors"
     type: claude
-    depends_on: [profile, technical, fundamental, perplexity, fetch_edgar, wikipedia, perplexity_analysis, research_profile, research_business, research_competitive, research_supply_chain, research_financial, research_valuation, research_risk_news]
+    depends_on: [index_research, profile, technical, fundamental, perplexity, fetch_edgar, wikipedia, perplexity_analysis]
     config:
       system: "You are a senior equity research analyst writing a professional report. Read and follow the style guide at ../../STYLE.md."
       disallowed_tools: [WebSearch, WebFetch, Agent, Skill, Bash, yfinance, alphavantage, brave-search, perplexity-ask, wikipedia, playwright, fetch, filesystem]
@@ -901,13 +905,11 @@ tasks:
         - artifacts/news_stories.md
         - artifacts/8k_summary.json
       prompt: |
-        Before writing, retrieve research findings for your section:
-          Run: uv run python skills/db.py finding-list --workdir ${workdir} --tags risk_news
-
-        Use these findings as your primary source. They were produced by specialist
-        research agents and include cross-tagged evidence from other domains.
-        Fall back to artifact files in artifacts/ for specific data and citations.
-        Do not call external tools or APIs — focus on synthesis from research findings.
+        Before writing, search the unified research index for all relevant material:
+          Run: uv run python skills/search_index/search_index.py "risks regulatory news events catalysts developments" --workdir ${workdir} --sections risk_news --top-k 25
+        This index contains all data artifacts, MCP research responses, and research findings.
+        Use these results as your primary source alongside the inline artifacts above.
+        Do not call external tools or APIs — focus on synthesis from provided data.
 
         ---
 

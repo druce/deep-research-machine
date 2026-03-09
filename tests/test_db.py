@@ -137,11 +137,11 @@ def test_task_ready_failed_deps_dont_block(workdir):
         run_db("task-update", "--workdir", str(workdir), "--task-id", tid, "--status", "complete")
     run_db("task-update", "--workdir", str(workdir), "--task-id", "fetch_edgar", "--status", "failed",
            "--error", "timeout")
-    # Also complete chunk wave and research wave tasks
+    # Also complete chunk wave, research wave, and index_research tasks
     for tid in ("chunk_documents", "tag_chunks", "build_index",
                 "research_profile", "research_business", "research_competitive",
                 "research_supply_chain", "research_financial", "research_valuation",
-                "research_risk_news"):
+                "research_risk_news", "index_research"):
         run_db("task-update", "--workdir", str(workdir), "--task-id", tid, "--status", "complete")
 
     rc, out = run_db("task-ready", "--workdir", str(workdir))

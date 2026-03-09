@@ -10,6 +10,7 @@ from typing import Dict
 # ============================================================================
 WORK_DIR = 'work'
 ARTIFACTS_DIR = 'artifacts'
+TEMP_DIR = 'temp'
 DATA_DIR = 'data'
 TEMPLATES_DIR = 'templates'
 

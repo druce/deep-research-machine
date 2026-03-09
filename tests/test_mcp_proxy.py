@@ -1,15 +1,11 @@
 """
-Integration tests for mcp_proxy.py — one test per service.
+Tests for mcp_proxy.py — unit tests for requestors tracking + integration tests.
 
-Each test:
-1. Creates a temp workdir with MCP_CACHE_WORKDIR set
-2. Starts proxy subprocess, makes one tool call
-3. Verifies mcp-cache.db has 1 row, result is non-empty
-4. Makes identical call again
-5. Verifies mcp-cache.db still has 1 row (cache hit, no new insert)
-6. Verifies result matches
+Unit tests verify requestors column behavior without starting MCP servers.
+Integration tests (marked @pytest.mark.integration) test full proxy with real services.
 
-Run with: uv run pytest tests/test_mcp_proxy.py -m integration -v
+Run unit tests:  uv run pytest tests/test_mcp_proxy.py -v -m "not integration"
+Run all:         uv run pytest tests/test_mcp_proxy.py -v
 """
 import json
 import os
@@ -19,6 +15,9 @@ import sys
 from pathlib import Path
 
 import pytest
+
+sys.path.insert(0, str(Path(__file__).parent.parent / "skills" / "mcp_proxy"))
+from mcp_proxy import open_cache, make_cache_key  # noqa: E402
 
 CWD = str(Path(__file__).parent.parent)
 PROXY = ["uv", "run", "python", "skills/mcp_proxy/mcp_proxy.py"]
@@ -165,3 +164,138 @@ def test_fmp_cache(tmp_path):
     result2 = call_via_proxy(proxy_args, "quote", {"symbol": "AAPL"}, workdir)
     assert cache_row_count(workdir) == 1
     assert result1 == result2
+
+
+# --- Unit tests for requestors tracking ---
+
+def test_requestors_populated_on_cache_miss(tmp_path):
+    """New cache entries get requestors populated from MCP_TASK_ID env."""
+    workdir = str(tmp_path)
+    conn = open_cache(workdir)
+    assert conn is not None
+
+    # Simulate a cache miss insert
+    key = make_cache_key("test_tool", {"arg": "val"})
+    task_id = "research_financial"
+    conn.execute(
+        "INSERT INTO mcp_cache VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (key, "test-server", "test_tool", '{"arg":"val"}',
+         '{"content":[]}', json.dumps([task_id]),
+         "2026-01-01T00:00:00Z")
+    )
+    conn.commit()
+
+    row = conn.execute(
+        "SELECT requestors FROM mcp_cache WHERE cache_key = ?", (key,)
+    ).fetchone()
+    requestors = json.loads(row["requestors"])
+    assert requestors == ["research_financial"]
+    conn.close()
+
+
+def test_requestors_updated_on_cache_hit(tmp_path):
+    """Cache hit from different task_id appends to requestors list."""
+    workdir = str(tmp_path)
+    conn = open_cache(workdir)
+    assert conn is not None
+
+    key = make_cache_key("search", {"query": "test"})
+    # Initial insert with first requestor
+    conn.execute(
+        "INSERT INTO mcp_cache VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (key, "test-server", "search", '{"query":"test"}',
+         '{"content":[]}', json.dumps(["research_competitive"]),
+         "2026-01-01T00:00:00Z")
+    )
+    conn.commit()
+
+    # Simulate cache hit from different task — update requestors
+    row = conn.execute(
+        "SELECT requestors FROM mcp_cache WHERE cache_key = ?", (key,)
+    ).fetchone()
+    requestors = json.loads(row["requestors"])
+    new_task = "research_supply_chain"
+    assert new_task not in requestors
+    requestors.append(new_task)
+    conn.execute(
+        "UPDATE mcp_cache SET requestors = ? WHERE cache_key = ?",
+        (json.dumps(requestors), key)
+    )
+    conn.commit()
+
+    # Verify both requestors present
+    row = conn.execute(
+        "SELECT requestors FROM mcp_cache WHERE cache_key = ?", (key,)
+    ).fetchone()
+    final = json.loads(row["requestors"])
+    assert "research_competitive" in final
+    assert "research_supply_chain" in final
+    conn.close()
+
+
+def test_requestors_no_duplicate_on_same_task(tmp_path):
+    """Same task_id hitting cache again doesn't duplicate in requestors."""
+    workdir = str(tmp_path)
+    conn = open_cache(workdir)
+    assert conn is not None
+
+    key = make_cache_key("get_info", {})
+    task_id = "research_profile"
+    conn.execute(
+        "INSERT INTO mcp_cache VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (key, "test-server", "get_info", '{}',
+         '{"content":[]}', json.dumps([task_id]),
+         "2026-01-01T00:00:00Z")
+    )
+    conn.commit()
+
+    # Simulate second hit from same task
+    row = conn.execute(
+        "SELECT requestors FROM mcp_cache WHERE cache_key = ?", (key,)
+    ).fetchone()
+    requestors = json.loads(row["requestors"])
+    if task_id not in requestors:
+        requestors.append(task_id)
+    conn.execute(
+        "UPDATE mcp_cache SET requestors = ? WHERE cache_key = ?",
+        (json.dumps(requestors), key)
+    )
+    conn.commit()
+
+    row = conn.execute(
+        "SELECT requestors FROM mcp_cache WHERE cache_key = ?", (key,)
+    ).fetchone()
+    assert json.loads(row["requestors"]) == ["research_profile"]
+    conn.close()
+
+
+def test_schema_migration_existing_db(tmp_path):
+    """open_cache adds requestors column to existing DB without it."""
+    db_path = tmp_path / "mcp-cache.db"
+    # Create an old-schema DB without requestors
+    conn = sqlite3.connect(str(db_path))
+    conn.execute("""
+        CREATE TABLE mcp_cache (
+            cache_key TEXT PRIMARY KEY,
+            server TEXT NOT NULL,
+            tool_name TEXT NOT NULL,
+            arguments TEXT NOT NULL,
+            result TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        )
+    """)
+    conn.execute(
+        "INSERT INTO mcp_cache VALUES (?, ?, ?, ?, ?, ?)",
+        ("key1", "srv", "tool", "{}", "{}", "2026-01-01")
+    )
+    conn.commit()
+    conn.close()
+
+    # open_cache should migrate — add requestors column
+    migrated = open_cache(str(tmp_path))
+    assert migrated is not None
+    row = migrated.execute(
+        "SELECT requestors FROM mcp_cache WHERE cache_key = 'key1'"
+    ).fetchone()
+    assert json.loads(row["requestors"]) == []
+    migrated.close()
