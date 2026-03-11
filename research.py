@@ -82,6 +82,34 @@ def hydrate_mcp_configs(workdir: Path) -> None:
         log(f"Hydrated {template_path.name} -> {output_path} (proxy-wrapped)")
 
 
+def collect_custom_prompts(workdir: Path) -> None:
+    """Interactively collect custom investigation prompts from the user."""
+    prompts_file = workdir / "custom_prompts.json"
+    if prompts_file.exists():
+        log(f"Custom prompts already exist at {prompts_file} — skipping collection")
+        return
+
+    print("\nCustom investigation prompts (enter empty line to finish):", file=sys.stderr)
+    prompts = []
+    idx = 1
+    while True:
+        try:
+            line = input(f"[{idx}]> ").strip()
+        except EOFError:
+            break
+        if not line:
+            break
+        prompts.append({"id": f"custom_{idx}", "prompt": line})
+        idx += 1
+
+    workdir.mkdir(parents=True, exist_ok=True)
+    prompts_file.write_text(json.dumps(prompts, indent=2))
+    if prompts:
+        log(f"Saved {len(prompts)} custom prompts to {prompts_file}")
+    else:
+        log("No custom prompts entered — task will be a no-op")
+
+
 def log(msg: str) -> None:
     """Print timestamped message to stderr."""
     ts = datetime.now().strftime("%H:%M:%S")
@@ -678,6 +706,10 @@ async def main() -> int:
 
     # Hydrate MCP config templates into workdir (once, before DAG execution)
     hydrate_mcp_configs(workdir)
+
+    # Collect custom investigation prompts (interactive, skip on resume)
+    if not args.resume:
+        collect_custom_prompts(workdir)
 
     wave = 0
     total_completed = 0
