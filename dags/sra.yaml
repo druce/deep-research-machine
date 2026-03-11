@@ -1162,7 +1162,7 @@ tasks:
 
         Carefully address each issue identified in the critique:
         - Improve clarity and readability
-        - Remove repetition
+        - Remove repetition and duplication. If you find the same information repeated, keep only the best version, update it with any useful information from other versions, and replace other versions with a reference like "as detailed in Section X".
         - Fix factual inaccuracies or inconsistencies. Attempt to verify in the available artifacts. Delete statements or make them more general rather than embarking on new research.
         - Elaborate on missing or incomplete analysis. Again, use existing artifacts rather than going down a new rabbit hole.
         - Improve logical flow and structure

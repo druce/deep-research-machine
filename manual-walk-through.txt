@@ -1,0 +1,89 @@
+Here's how to run the pipeline manually for ${SYMBOL}, step by step.
+
+  1. Set up the work directory and initialize the DB:
+
+  # Create today's workdir
+    # Set up workdir and database
+  export SYMBOL=${SYMBOL}
+  export DATE=20260310
+  export WORKDIR=work/${SYMBOL}_${DATE}
+
+  mkdir -p work/${SYMBOL}_${DATE}
+
+  # Initialize the database from the DAG
+  ./skills/db.py init --workdir $WORKDIR --dag dags/sra.yaml --ticker ${SYMBOL}
+
+  2. Check what tasks are ready:
+
+  ./skills/db.py task-ready --workdir $WORKDIR
+
+  This should show profile as the only ready task (no deps).
+
+  3. Run the profile fetch:
+
+  ./skills/fetch_profile/fetch_profile.py $SYMBOL --workdir $WORKDIR
+
+  Then mark it complete and register its artifacts:
+./skills/db.py artifact-add --workdir $WORKDIR \
+    --task-id profile \
+    --name profile \
+    --path artifacts/profile.json \
+    --format json \
+    --source "finnhub+fmp" \
+    --summary "Company profile for $SYMBOL"
+
+  ./skills/db.py task-update --workdir $WORKDIR --task-id profile --status complete
+
+  4. Check ready tasks again:
+
+  ./skills/db.py task-ready --workdir work/${SYMBOL}_${DATE}
+
+run peers task
+  ./skills/identify_peers/identify_peers.py ${SYMBOL} --workdir work/${SYMBOL}_${DATE}
+
+./skills/db.py artifact-add --workdir $WORKDIR \
+    --task-id peers \
+    --name peers \
+    --path artifacts/peers_list.json \
+    --format json \
+    --source "finnhub+fmp" \
+    --summary "Company peers for $SYMBOL"
+
+  ./skills/db.py task-update --workdir $WORKDIR --task-id peers --status complete
+
+  Now you should see the data-gathering wave: technical, fundamental, perplexity, fetch_edgar, wikipedia, perplexity_analysis.
+
+  5. Run each data task one at a time (or in parallel):
+
+./skills/fetch_technical/fetch_technical.py ${SYMBOL} --workdir work/${SYMBOL}_${DATE}
+./skills/fetch_fundamental/fetch_fundamental.py ${SYMBOL} --workdir work/${SYMBOL}_${DATE}
+./skills/fetch_edgar/fetch_edgar.py ${SYMBOL} --workdir work/${SYMBOL}_${DATE}
+./skills/fetch_wikipedia/fetch_wikipedia.py ${SYMBOL} --workdir work/${SYMBOL}_${DATE}
+./skills/fetch_wikipedia/fetch_detailed_profile_info.py ${SYMBOL} --workdir work/${SYMBOL}_${DATE}
+
+  After each, mark complete:
+
+  ./skills/db.py task-update --workdir work/${SYMBOL}_${DATE} --task-id technical --status complete
+  ./skills/db.py task-update --workdir work/${SYMBOL}_${DATE} --task-id fundamental --status complete
+  ./skills/db.py task-update --workdir work/${SYMBOL}_${DATE} --task-id perplexity --status complete
+  ./skills/db.py task-update --workdir work/${SYMBOL}_${DATE} --task-id fetch_edgar --status complete
+  ./skills/db.py task-update --workdir work/${SYMBOL}_${DATE} --task-id wikipedia --status complete
+  ./skills/db.py task-update --workdir work/${SYMBOL}_${DATE} --task-id perplexity_analysis --status complete
+
+  ./skills/db.py task-update --workdir work/${SYMBOL}_${DATE} --task-id edgar --status complete
+
+# ... etc for each task
+
+  6. Check overall status at any point:
+
+  ./skills/db.py status --workdir work/${SYMBOL}_${DATE}
+
+  7. Continue the pattern — after all data tasks complete, task-ready will show the 7 parallel section writers. Those are Claude tasks (not
+  Python scripts), so they'd be run via:
+
+  claude --dangerously-skip-permissions -p "$(prompt for write_profile)"
+
+  But for manual testing, you probably want to focus on the data-gathering steps first.
+
+  Quick tip: Each Python script outputs a JSON manifest to stdout with the artifacts it produced. You can inspect the
+  work/${SYMBOL}_${DATE}/artifacts/ directory after each step to see what was generated.

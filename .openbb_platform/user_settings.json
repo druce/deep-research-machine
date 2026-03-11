@@ -1,0 +1,36 @@
+{
+    "credentials": {
+        "fmp_api_key": "49bc433ab1a96cbee61ddc19801ff73b",
+        "polygon_api_key": "l1w_ucm1lXxIfpmWw0vbKVwrRkUAu6I8",
+        "fred_api_key": "af24814a8cd16814d7815999a2395bba",
+        "alpha_vantage_api_key": "CQL90XVWCKLTYCRT",
+        "tiingo_token": "116d6510acae2a4ff233d259ced533d15e8fe041",
+        "biztoc_api_key": "a12a5f86abmsha856b736e6ceb2ap1a36ddjsne0a660118d4d",
+        "finnhub_api_key": "cfv3l01r01qtdvl3hvn0cfv3l01r01qtdvl3hvng",
+        "quandl_api_key": "xYB2hZ7TDGd-APQz9pY3",
+        "eodhd_api_key": "63fe3ad31e2df3.41660445",
+        "sec_api_api_key": "d15a5aaec2008b6b54b9d1660385e97f095c2c9a82687d138cef72bba58cfe0a"
+    },
+    "preferences": {
+        "data_directory": "~/OpenBBUserData",
+        "export_directory": "~/OpenBBUserData/exports",
+        "metadata": true,
+        "output_type": "OBBject"
+    },
+    "defaults": {
+        "commands": {
+            "/equity/price/historical": {
+                "provider": ["fmp", , "yfinance", "polygon", "tiingo"]
+            },
+            "/equity/fundamental/income": {
+                "provider": ["fmp", "polygon"]
+            },
+            "/equity/fundamental/balance": {
+                "provider": ["fmp", "polygon"]
+            },
+            "/economy/fred_series": {
+                "provider": "fred"
+            }
+        }
+    }
+}
