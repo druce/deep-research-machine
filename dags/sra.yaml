@@ -198,11 +198,11 @@ tasks:
         [{"id": "<chunk_id>", "tags": ["tag1", "tag2"]}, ...]
 
         Include every chunk from chunks.json. Do not skip any.
-      disallowed_tools: [WebSearch, WebFetch]
+      disallowed_tools: [WebSearch, WebFetch, yfinance, alphavantage, brave-search, wikipedia, openbb-mcp, playwright]
     outputs:
       chunk_tags: {path: "lancedb/chunk_tags.json", format: json, description: "Section relevance tags for each chunk"}
 
-  # build index from chunks and tags
+  # build LanceDB index from chunks and tags
   build_index:
     sort_order: 12
     description: Build LanceDB hybrid vector+BM25 index from chunks and tags
