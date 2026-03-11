@@ -136,6 +136,19 @@ tasks:
       wikipedia_summary: {path: "artifacts/wikipedia_summary.txt", format: txt, description: "Wikipedia article summary providing company history, operations, and public background"}
       wikipedia_full:    {path: "artifacts/wikipedia_full.txt", format: txt, description: "Full Wikipedia article text with complete detail on company history, operations, and background"}
 
+  custom_research:
+    sort_order: 8
+    description: Run user-provided custom investigation prompts via Claude
+    type: python
+    depends_on: [profile, peers]
+    config:
+      script: skills/custom_research/custom_research.py
+      args:
+        ticker: "${ticker}"
+        workdir: "${workdir}"
+    outputs:
+      custom_research_tags: {path: "artifacts/custom_research_tags.json", format: json, description: "Section relevance tags for each custom research response"}
+
   # perplexity_analysis:
   #   sort_order: 8
   #   description: Generate business model, competitive, risk, and investment analysis via Perplexity
@@ -153,12 +166,12 @@ tasks:
   #     investment:     {path: "artifacts/investment_thesis.md", format: md, description: "Investment thesis: bull/bear cases, catalysts, valuation considerations, and recommendation framework via Perplexity AI"}
 
   # --- Chunk, tag, and index wave ---
-  # chunk docs and embed junks in chunks.json
+  # chunk docs and embed chunks in chunks.json
   chunk_documents:
     sort_order: 10
     description: Chunk and embed text artifacts for hybrid retrieval
     type: python
-    depends_on: [technical, fundamental, detailed_profile, fetch_edgar, wikipedia, detailed_profile]
+    depends_on: [technical, fundamental, detailed_profile, fetch_edgar, wikipedia, custom_research]
     config:
       script: skills/chunk_index/chunk_documents.py
       args:
