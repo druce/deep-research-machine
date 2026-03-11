@@ -1123,7 +1123,7 @@ tasks:
 
         Evaluate the report for:
         - Clarity and readability
-        - Repetition; For instance, early summary sections can refer to supply chain issues but should not go into details if this is discussed comprehensively later.
+        - Repetition; similar details and points should not be repeated in different sections. As an example, early summary sections and later concluding sections can REFER to e.g. supply chain issues but SHOULD NOT detail at length the same issues discussed comprehensively in the supply chain part of the report.
         - Factual accuracy and consistency
         - Missing or incomplete analysis
         - Logical flow
