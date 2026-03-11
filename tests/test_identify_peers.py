@@ -251,11 +251,28 @@ class TestSelectPeers:
 
 
 class TestFetchFinnhubPeers:
-    @patch(f"{_M}.finnhub")
-    def test_returns_peers_on_success(self, mock_finnhub):
+    """Tests for fetch_finnhub_peers with lazy import mocking.
+
+    Since finnhub is imported inside the function body, we mock it in
+    sys.modules so the local `import finnhub` picks up the mock.
+    """
+
+    def _mock_finnhub(self, peers_return=None, side_effect=None):
+        mock_mod = MagicMock()
+        if side_effect:
+            mock_mod.Client.side_effect = side_effect
+        else:
+            mock_client = MagicMock()
+            mock_client.company_peers.return_value = peers_return or []
+            mock_mod.Client.return_value = mock_client
+        return mock_mod
+
+    @patch.dict("sys.modules", {"finnhub": MagicMock()})
+    def test_returns_peers_on_success(self):
+        mock_mod = sys.modules["finnhub"]
         mock_client = MagicMock()
         mock_client.company_peers.return_value = ["AAPL", "GOOG", "MSFT", "META"]
-        mock_finnhub.Client.return_value = mock_client
+        mock_mod.Client.return_value = mock_client
 
         result, source = fetch_finnhub_peers("MSFT", api_key="fake-key")
         assert result is not None
@@ -263,11 +280,12 @@ class TestFetchFinnhubPeers:
         assert "AAPL" in result
         assert source == "Finnhub"
 
-    @patch(f"{_M}.finnhub")
-    def test_returns_none_on_empty(self, mock_finnhub):
+    @patch.dict("sys.modules", {"finnhub": MagicMock()})
+    def test_returns_none_on_empty(self):
+        mock_mod = sys.modules["finnhub"]
         mock_client = MagicMock()
         mock_client.company_peers.return_value = []
-        mock_finnhub.Client.return_value = mock_client
+        mock_mod.Client.return_value = mock_client
 
         result, source = fetch_finnhub_peers("MSFT", api_key="fake-key")
         assert result is None
@@ -278,19 +296,21 @@ class TestFetchFinnhubPeers:
         assert result is None
         assert "not set" in source.lower()
 
-    @patch(f"{_M}.finnhub")
-    def test_returns_none_on_exception(self, mock_finnhub):
-        mock_finnhub.Client.side_effect = Exception("connection error")
+    @patch.dict("sys.modules", {"finnhub": MagicMock()})
+    def test_returns_none_on_exception(self):
+        mock_mod = sys.modules["finnhub"]
+        mock_mod.Client.side_effect = Exception("connection error")
 
         result, source = fetch_finnhub_peers("MSFT", api_key="fake-key")
         assert result is None
         assert "error" in source.lower()
 
-    @patch(f"{_M}.finnhub")
-    def test_limits_to_max_peers(self, mock_finnhub):
+    @patch.dict("sys.modules", {"finnhub": MagicMock()})
+    def test_limits_to_max_peers(self):
+        mock_mod = sys.modules["finnhub"]
         mock_client = MagicMock()
         mock_client.company_peers.return_value = [f"T{i}" for i in range(30)]
-        mock_finnhub.Client.return_value = mock_client
+        mock_mod.Client.return_value = mock_client
 
         result, _ = fetch_finnhub_peers("MSFT", api_key="fake-key")
         assert result is not None

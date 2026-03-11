@@ -22,7 +22,6 @@ import time
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-import finnhub
 import yfinance as yf
 
 _SKILLS_DIR = Path(__file__).resolve().parent.parent
@@ -61,6 +60,7 @@ def fetch_finnhub_peers(
     if not key:
         return None, "FINNHUB_API_KEY not set"
     try:
+        import finnhub
         client = finnhub.Client(api_key=key)
         peers = client.company_peers(symbol)
         peers = [s for s in (peers or []) if s != symbol]
@@ -392,7 +392,13 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    symbol = validate_symbol(args.symbol)
+    try:
+        symbol = validate_symbol(args.symbol)
+    except ValueError as e:
+        manifest = {"status": "error", "artifacts": [], "error": str(e)}
+        print(json.dumps(manifest, indent=2))
+        return 2
+
     workdir = Path(args.workdir) if args.workdir else Path(default_workdir(symbol))
     workdir.mkdir(parents=True, exist_ok=True)
     artifacts_dir = workdir / "artifacts"
