@@ -26,22 +26,26 @@
 
 | Indicator | Value | Signal |
 |-----------|-------|--------|
-| **20-Day SMA** | ${{ technical_analysis.indicators.sma_20 | round(2) }} | {% if technical_analysis.trend_signals.above_20sma %}✅ Bullish{% else %}❌ Bearish{% endif %} |
-| **50-Day SMA** | ${{ technical_analysis.indicators.sma_50 | round(2) }} | {% if technical_analysis.trend_signals.above_50sma %}✅ Bullish{% else %}❌ Bearish{% endif %} |
-| **200-Day SMA** | ${{ technical_analysis.indicators.sma_200 | round(2) }} | {% if technical_analysis.trend_signals.above_200sma %}✅ Bullish{% else %}❌ Bearish{% endif %} |
-| **RSI (14)** | {{ technical_analysis.indicators.rsi_14 | round(2) }} | {% if technical_analysis.indicators.rsi_14 > 70 %}Overbought{% elif technical_analysis.indicators.rsi_14 < 30 %}Oversold{% else %}Neutral{% endif %} |
-| **MACD** | {{ technical_analysis.indicators.macd | round(2) }} | {% if technical_analysis.trend_signals.macd_bullish %}✅ Bullish{% else %}❌ Bearish{% endif %} |
+| **20-Day SMA** | {% if technical_analysis.indicators.sma_20 is not none %}${{ technical_analysis.indicators.sma_20 | round(2) }}{% else %}N/A{% endif %} | {% if technical_analysis.trend_signals.above_20sma %}✅ Bullish{% else %}❌ Bearish{% endif %} |
+| **50-Day SMA** | {% if technical_analysis.indicators.sma_50 is not none %}${{ technical_analysis.indicators.sma_50 | round(2) }}{% else %}N/A{% endif %} | {% if technical_analysis.trend_signals.above_50sma %}✅ Bullish{% else %}❌ Bearish{% endif %} |
+| **200-Day SMA** | {% if technical_analysis.indicators.sma_200 is not none %}${{ technical_analysis.indicators.sma_200 | round(2) }}{% else %}N/A (insufficient history){% endif %} | {% if technical_analysis.indicators.sma_200 is none %}⚪ N/A{% elif technical_analysis.trend_signals.above_200sma %}✅ Bullish{% else %}❌ Bearish{% endif %} |
+| **RSI (14)** | {% if technical_analysis.indicators.rsi_14 is not none %}{{ technical_analysis.indicators.rsi_14 | round(2) }}{% else %}N/A{% endif %} | {% if technical_analysis.indicators.rsi_14 is not none %}{% if technical_analysis.indicators.rsi_14 > 70 %}Overbought{% elif technical_analysis.indicators.rsi_14 < 30 %}Oversold{% else %}Neutral{% endif %}{% else %}N/A{% endif %} |
+| **MACD** | {% if technical_analysis.indicators.macd is not none %}{{ technical_analysis.indicators.macd | round(2) }}{% else %}N/A{% endif %} | {% if technical_analysis.trend_signals.macd_bullish %}✅ Bullish{% else %}❌ Bearish{% endif %} |
 
-**Volatility:** ATR = ${{ technical_analysis.indicators.atr_14 | round(2) }}
-**Volume:** {{ technical_analysis.indicators.avg_volume_20d | int | format_number }} (20-day avg)
+**Volatility:** ATR = {% if technical_analysis.indicators.atr_14 is not none %}${{ technical_analysis.indicators.atr_14 | round(2) }}{% else %}N/A{% endif %}
+**Volume:** {% if technical_analysis.indicators.avg_volume_20d is not none %}{{ technical_analysis.indicators.avg_volume_20d | int | format_number }} (20-day avg){% else %}N/A{% endif %}
 
 **Trend Status:**
-{% if technical_analysis.trend_signals.above_200sma %}
+{% if technical_analysis.indicators.sma_200 is none %}
+- Long-term trend: ⚪ **N/A** (insufficient trading history for 200-day SMA)
+{% elif technical_analysis.trend_signals.above_200sma %}
 - Long-term trend: ✅ **Bullish** (above 200-day SMA)
 {% else %}
 - Long-term trend: ❌ **Bearish** (below 200-day SMA)
 {% endif %}
-{% if technical_analysis.trend_signals.sma_50_200_bullish %}
+{% if technical_analysis.indicators.sma_200 is none %}
+- Golden/Death Cross: ⚪ **N/A** (requires 200-day SMA)
+{% elif technical_analysis.trend_signals.sma_50_200_bullish %}
 - Golden Cross: ✅ **Active** (50-day SMA above 200-day SMA)
 {% else %}
 - Death Cross: ❌ **Present** (50-day SMA below 200-day SMA)
@@ -119,13 +123,14 @@ This section would contain a comprehensive 12-section analysis covering:
 
 {% if technical_analysis %}
 **Technical Outlook:**
-{% if technical_analysis.trend_signals.above_200sma %}
+{% if technical_analysis.indicators.sma_200 is none %}
+- 200-day SMA not available (insufficient trading history)
+{% elif technical_analysis.trend_signals.above_200sma %}
 - The stock demonstrates positive long-term momentum, trading above its 200-day moving average
-- Current RSI of {{ technical_analysis.indicators.rsi_14 | round(1) }} suggests {% if technical_analysis.indicators.rsi_14 > 70 %}overbought conditions{% elif technical_analysis.indicators.rsi_14 < 30 %}oversold conditions{% else %}neutral momentum{% endif %}
 {% else %}
 - The stock is in a long-term downtrend, trading below its 200-day moving average
-- Technical indicators suggest caution
 {% endif %}
+{% if technical_analysis.indicators.rsi_14 is not none %}- Current RSI of {{ technical_analysis.indicators.rsi_14 | round(1) }} suggests {% if technical_analysis.indicators.rsi_14 > 70 %}overbought conditions{% elif technical_analysis.indicators.rsi_14 < 30 %}oversold conditions{% else %}neutral momentum{% endif %}{% endif %}
 {% endif %}
 
 {% if peers %}
