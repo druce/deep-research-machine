@@ -22,11 +22,11 @@ def run_chunk(workdir, *extra_args):
 
 
 @pytest.fixture
-def workdir_with_artifacts(tmp_path):
-    """Create a minimal workdir with text artifacts and a manifest."""
-    art = tmp_path / "artifacts"
-    art.mkdir()
-    (art / "wikipedia_full.txt").write_text(
+def workdir_with_knowledge(tmp_path):
+    """Create a minimal workdir with text files in knowledge/."""
+    knowledge = tmp_path / "knowledge"
+    knowledge.mkdir()
+    (knowledge / "wikipedia_full.txt").write_text(
         "Nvidia Corporation is an American multinational technology company.\n\n"
         "It designs graphics processing units for gaming and professional markets.\n\n"
         "Nvidia was founded in 1993 by Jensen Huang, Chris Malachowsky, and Curtis Priem.\n\n"
@@ -38,19 +38,15 @@ def workdir_with_artifacts(tmp_path):
         "The company reported record revenue in fiscal year 2024.\n\n"
         "Supply chain dependencies include TSMC for chip manufacturing."
     )
-    (art / "manifest.json").write_text(json.dumps([
-        {"file": "artifacts/wikipedia_full.txt", "format": "txt",
-         "description": "Wikipedia full article"}
-    ]))
     return tmp_path
 
 
 @pytest.mark.integration
-def test_chunk_documents_produces_chunks_json(workdir_with_artifacts):
-    rc, manifest, stderr = run_chunk(workdir_with_artifacts)
+def test_chunk_documents_produces_chunks_json(workdir_with_knowledge):
+    rc, manifest, stderr = run_chunk(workdir_with_knowledge)
     assert rc == 0, f"Failed: {stderr}"
     assert manifest["status"] == "complete"
-    chunks_path = workdir_with_artifacts / "lancedb" / "chunks.json"
+    chunks_path = workdir_with_knowledge / "lancedb" / "chunks.json"
     assert chunks_path.exists()
     chunks = json.loads(chunks_path.read_text())
     assert len(chunks) >= 1
@@ -62,23 +58,24 @@ def test_chunk_documents_produces_chunks_json(workdir_with_artifacts):
 
 
 @pytest.mark.integration
-def test_chunk_documents_skips_binary(workdir_with_artifacts):
-    """PNG and CSV files should not be chunked."""
-    (workdir_with_artifacts / "artifacts" / "chart.png").write_bytes(b"\x89PNG fake")
-    (workdir_with_artifacts / "artifacts" / "income.csv").write_text("year,revenue\n2024,60000\n")
-    rc, manifest, _ = run_chunk(workdir_with_artifacts)
+def test_chunk_documents_skips_non_text(workdir_with_knowledge):
+    """JSON and CSV files in knowledge/ should not be chunked."""
+    knowledge = workdir_with_knowledge / "knowledge"
+    (knowledge / "tags.json").write_text('{"tags": ["profile"]}')
+    (knowledge / "data.csv").write_text("year,revenue\n2024,60000\n")
+    rc, manifest, _ = run_chunk(workdir_with_knowledge)
     assert rc == 0
-    chunks = json.loads((workdir_with_artifacts / "lancedb" / "chunks.json").read_text())
+    chunks = json.loads((workdir_with_knowledge / "lancedb" / "chunks.json").read_text())
     sources = [c["source"] for c in chunks]
-    assert not any("chart.png" in s for s in sources)
-    assert not any("income.csv" in s for s in sources)
+    assert not any("tags.json" in s for s in sources)
+    assert not any("data.csv" in s for s in sources)
 
 
 @pytest.mark.integration
-def test_chunk_documents_metadata(workdir_with_artifacts):
-    rc, _, _ = run_chunk(workdir_with_artifacts)
+def test_chunk_documents_metadata(workdir_with_knowledge):
+    rc, _, _ = run_chunk(workdir_with_knowledge)
     assert rc == 0
-    chunks = json.loads((workdir_with_artifacts / "lancedb" / "chunks.json").read_text())
+    chunks = json.loads((workdir_with_knowledge / "lancedb" / "chunks.json").read_text())
     for c in chunks:
-        assert c["source"].startswith("artifacts/")
+        assert c["source"].startswith("knowledge/")
         assert "doc_type" in c

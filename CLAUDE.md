@@ -128,11 +128,25 @@ With `n_iterations: 2`, repeat: `_critic_2.md`, `_v2.md`, then publish `_v2`.
 - Draft files live on disk only (not in DB)
 - Downstream tasks always read from `artifacts/`
 
+## Two-Path Data Architecture
+
+Data flows through two paths based on format:
+
+1. **`artifacts/`** = structured data (JSON, CSV, PNG). Directly readable by writers via `artifacts_inline`. Persists through the run.
+2. **`knowledge/`** = staging directory for text (MD, TXT). All text files from data-gathering tasks land here, get chunked/tagged/indexed into LanceDB. Writers access this content via search, not direct file reads.
+
+Data-gathering scripts route outputs accordingly:
+- `fetch_wikipedia` → `knowledge/wikipedia_*.txt`
+- `detailed_profile` → `knowledge/*.md` (7 files)
+- `fetch_edgar` → `knowledge/sec_10k_*.md`, `knowledge/sec_10q_*.md`, `knowledge/sec_8k_*.md`; JSON/CSV → `artifacts/`
+- `custom_research` → `knowledge/custom_research_*.md`; tags JSON → `artifacts/`
+- Research agents → `knowledge/findings_{tag}.md`
+
 ## Chunk → Index → Search Pipeline
 
-Text artifacts from data-gathering tasks are processed into a searchable LanceDB index:
+Text in `knowledge/` is processed into a searchable LanceDB index:
 
-1. **chunk_documents.py** — splits `.md`/`.txt` artifacts into paragraph-boundary chunks (~600–800 tokens), embeds via OpenAI `text-embedding-3-small`
+1. **chunk_documents.py** — reads `knowledge/` directory, splits `.md`/`.txt` files into paragraph-boundary chunks (~600–800 tokens), embeds via OpenAI `text-embedding-3-small`
 2. **tag_chunks** (Claude task) — assigns section tags (`profile`, `financial`, `competitive`, etc.) to each chunk
 3. **build_index.py** — merges chunks + tags into LanceDB table at `lancedb/index/` with vector + FTS indexes
 4. **7 research agents** — query the index via `search_index.py`, use MCP tools (cached by proxy), write findings to `knowledge/findings_{tag}.md`

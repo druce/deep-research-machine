@@ -401,13 +401,13 @@ Cite recent analyst reports, earnings transcripts, SEC filings, and financial da
 
 # Map of task_key -> (output_path_relative, prompt_builder)
 TASKS = {
-    "news": ("artifacts/news_stories.md", _prompt_news),
-    "profile": ("artifacts/business_profile.md", _prompt_business_profile),
-    "executives": ("artifacts/executive_profiles.md", _prompt_executive_profiles),
-    "biz_model": ("artifacts/business_model_analysis.md", _prompt_business_model),
-    "competitive": ("artifacts/competitive_analysis.md", _prompt_competitive),
-    "risk": ("artifacts/risk_analysis.md", _prompt_risk),
-    "thesis": ("artifacts/investment_thesis.md", _prompt_investment_thesis),
+    "news": ("knowledge/news_stories.md", _prompt_news),
+    "profile": ("knowledge/business_profile.md", _prompt_business_profile),
+    "executives": ("knowledge/executive_profiles.md", _prompt_executive_profiles),
+    "biz_model": ("knowledge/business_model_analysis.md", _prompt_business_model),
+    "competitive": ("knowledge/competitive_analysis.md", _prompt_competitive),
+    "risk": ("knowledge/risk_analysis.md", _prompt_risk),
+    "thesis": ("knowledge/investment_thesis.md", _prompt_investment_thesis),
 }
 
 # Artifact metadata for the manifest
@@ -466,6 +466,7 @@ async def run_task(
 async def run(symbol: str, workdir: Path, debug: bool = False) -> int:
     """Run all 7 research tasks in parallel."""
     ensure_directory(workdir / "artifacts")
+    ensure_directory(workdir / "knowledge")
 
     company_name = get_company_name(symbol, workdir)
     company = f"{company_name} ({symbol})" if company_name != symbol else symbol

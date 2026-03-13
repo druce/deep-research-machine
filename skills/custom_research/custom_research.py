@@ -89,7 +89,7 @@ async def run_prompt(
 ) -> dict:
     """Run a single custom prompt via invoke_claude. Return result dict."""
     prompt_id = f"custom_{idx}"
-    output_path = f"artifacts/custom_research_{idx}.md"
+    output_path = f"knowledge/custom_research_{idx}.md"
 
     full_prompt = (
         f"Research the following question about {company} ({symbol}):\n\n"
@@ -121,7 +121,7 @@ async def run_prompt(
 
 async def tag_response(idx: int, workdir: Path) -> list[str]:
     """Auto-tag a custom research response for section relevance. Return list of tags."""
-    response_path = f"artifacts/custom_research_{idx}.md"
+    response_path = f"knowledge/custom_research_{idx}.md"
     tag_output_path = f"artifacts/custom_research_{idx}_tags.json"
     tags_list = "\n".join(f"- {t}" for t in SECTION_TAGS)
 
@@ -159,6 +159,7 @@ async def run_all(symbol: str, workdir: Path) -> int:
     """Main async entry point. Returns exit code."""
     workdir = Path(workdir)
     ensure_directory(workdir / "artifacts")
+    ensure_directory(workdir / "knowledge")
 
     # Read custom prompts
     prompts_file = workdir / "custom_prompts.json"

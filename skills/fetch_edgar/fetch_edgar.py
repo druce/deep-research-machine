@@ -43,6 +43,7 @@ from fetch_edgar.filing_items import (  # noqa: E402
     get_10q_items,
     _10K_ITEM_MAP,
     _10Q_ITEM_MAP,
+    _8K_ITEM_MAP,
 )
 
 
@@ -208,19 +209,30 @@ def get_financials(
 # 5. Recent 8-K Filings
 # ============================================================================
 
+def _describe_8k_items(items_reported: List[str]) -> str:
+    """Build a human-readable description from 8-K item codes."""
+    # Filter out Item 9.01 (exhibits) — not informative as a label
+    substantive = [i for i in items_reported if i != "Item 9.01"]
+    if not substantive:
+        substantive = items_reported
+    labels = [_8K_ITEM_MAP.get(item, item) for item in substantive]
+    return ", ".join(labels) if labels else "8-K filing"
+
+
 def get_recent_8k(
     symbol: str,
     workdir: Path,
     lookback_days: int = SEC_LOOKBACK_DAYS,
-) -> Tuple[bool, Optional[List[Dict]], Optional[str]]:
-    """Summarise recent 8-K filings within the lookback period.
+) -> Tuple[bool, Optional[Dict], Optional[str]]:
+    """Fetch recent 8-K filings: summary index + full document text.
 
     Returns:
-        (success, list_of_8k_summary_dicts | None, error_message | None)
+        (success, {"summaries": [...], "doc_artifacts": [...]}, error | None)
     """
     logger.info("Fetching 8-K filings for %s (lookback=%d days)",
                 symbol, lookback_days)
     artifacts_dir = ensure_directory(workdir / "artifacts")
+    knowledge_dir = ensure_directory(workdir / "knowledge")
 
     try:
         company = _get_company(symbol)
@@ -229,6 +241,8 @@ def get_recent_8k(
 
         cutoff = datetime.now() - timedelta(days=lookback_days)
         summaries: List[Dict] = []
+        doc_artifacts: List[Dict] = []
+        used_filenames: Dict[str, int] = {}  # track duplicates per date
 
         try:
             filings = company.get_filings(form="8-K")
@@ -251,37 +265,99 @@ def get_recent_8k(
                     fdate = datetime(fdate.year, fdate.month, fdate.day)
 
                 if fdate < cutoff:
-                    break  # oldest-first would need continue, but edgartools is newest-first
+                    break  # edgartools returns newest-first
+
+                date_str = fdate.strftime("%Y-%m-%d")
+                accession = str(getattr(filing, "accession_number",
+                                        getattr(filing, "accession_no", "")))
 
                 summary_entry: Dict = {
-                    "filing_date": fdate.strftime("%Y-%m-%d"),
-                    "accession_number": str(getattr(filing, "accession_number",
-                                                    getattr(filing, "accession_no", ""))),
+                    "filing_date": date_str,
+                    "accession_number": accession,
                     "description": str(getattr(filing, "description", "")),
                 }
 
                 # Try to get items reported from the filing object
+                items_reported: List[str] = []
                 try:
                     eightk = filing.obj()
-                    if eightk is not None:
-                        # Some 8-K objects expose items as a list or dict
-                        items_reported = []
-                        if hasattr(eightk, "items"):
-                            raw_items = eightk.items
-                            if callable(raw_items):
-                                raw_items = raw_items()
-                            if isinstance(raw_items, (list, tuple)):
-                                items_reported = [str(i) for i in raw_items]
-                            elif isinstance(raw_items, dict):
-                                items_reported = list(raw_items.keys())
-                            elif raw_items is not None:
-                                items_reported = [str(raw_items)]
-                        summary_entry["items_reported"] = items_reported
+                    if eightk is not None and hasattr(eightk, "items"):
+                        raw_items = eightk.items
+                        if callable(raw_items):
+                            raw_items = raw_items()
+                        if isinstance(raw_items, (list, tuple)):
+                            items_reported = [str(i) for i in raw_items]
+                        elif isinstance(raw_items, dict):
+                            items_reported = list(raw_items.keys())
+                        elif raw_items is not None:
+                            items_reported = [str(raw_items)]
                 except Exception:
-                    # 8-K obj() parsing is best-effort
-                    summary_entry["items_reported"] = []
+                    pass  # best-effort
+                summary_entry["items_reported"] = items_reported
 
                 summaries.append(summary_entry)
+
+                # --- Download full document text ---
+                try:
+                    content = None
+                    try:
+                        content = filing.markdown()
+                    except Exception:
+                        pass
+                    if not content:
+                        try:
+                            content = filing.text()
+                        except Exception:
+                            pass
+
+                    if not content or len(content.strip()) < 50:
+                        logger.warning("8-K %s (%s): no meaningful content, skipping download",
+                                       date_str, accession)
+                        continue
+
+                    # Determine unique filename
+                    base_name = f"sec_8k_{date_str}"
+                    count = used_filenames.get(base_name, 0)
+                    used_filenames[base_name] = count + 1
+                    if count > 0:
+                        filename = f"{base_name}_{count + 1}.md"
+                    else:
+                        filename = f"{base_name}.md"
+
+                    # Build description from items
+                    item_desc = _describe_8k_items(items_reported)
+                    description = f"8-K filed {date_str}: {item_desc}"
+
+                    # Write file with header (text → knowledge/)
+                    out_path = knowledge_dir / filename
+                    with open(out_path, "w") as f:
+                        f.write(f"# 8-K Filing ({date_str})\n\n")
+                        f.write(f"**Accession:** {accession}\n\n")
+                        if items_reported:
+                            f.write(f"**Items:** {', '.join(items_reported)}\n\n")
+                        f.write("---\n\n")
+                        f.write(content)
+
+                    char_count = len(content)
+                    artifact_name = base_name.replace("-", "_")
+                    if count > 0:
+                        artifact_name += f"_{count + 1}"
+
+                    doc_artifacts.append({
+                        "name": artifact_name,
+                        "path": f"knowledge/{filename}",
+                        "format": "md",
+                        "source": "sec-edgar",
+                        "description": description,
+                        "summary": f"{description} ({char_count} chars)",
+                    })
+                    logger.info("Saved 8-K document %s (%d chars) -> %s",
+                                date_str, char_count, filename)
+
+                except Exception as dl_exc:
+                    logger.warning("Failed to download 8-K %s content: %s",
+                                   date_str, dl_exc)
+                    continue
 
             except Exception as entry_exc:
                 logger.warning("Error processing 8-K entry: %s", entry_exc)
@@ -291,8 +367,9 @@ def get_recent_8k(
         with open(out_path, "w") as f:
             json.dump(summaries, f, indent=2)
 
-        logger.info("Saved %d 8-K summaries to %s", len(summaries), out_path)
-        return True, summaries, None
+        logger.info("Saved %d 8-K summaries, %d documents downloaded",
+                     len(summaries), len(doc_artifacts))
+        return True, {"summaries": summaries, "doc_artifacts": doc_artifacts}, None
 
     except Exception as exc:
         msg = f"8-K summary failed: {exc}"
@@ -410,7 +487,7 @@ def main() -> int:
             "summary": summary_10k_meta,
         })
 
-        # Add each extracted item as an artifact
+        # Add each extracted item as an artifact (text → knowledge/)
         for item_key, text in extracted_10k.items():
             if item_key in _10K_ITEM_MAP:
                 suffix, label = _10K_ITEM_MAP[item_key]
@@ -421,7 +498,7 @@ def main() -> int:
             item_summary = f"{label} from {filing_year} 10-K ({len(text)} chars)"
             artifacts.append({
                 "name": f"10k_{suffix}",
-                "path": f"artifacts/{filename}",
+                "path": f"knowledge/{filename}",
                 "format": "md",
                 "source": "sec-edgar",
                 "description": item_summary,
@@ -461,7 +538,7 @@ def main() -> int:
             "summary": summary_10q_meta,
         })
 
-        # Add each extracted item
+        # Add each extracted item (text → knowledge/)
         for item_key, text in extracted_10q.items():
             if item_key in _10Q_ITEM_MAP:
                 suffix, label = _10Q_ITEM_MAP[item_key]
@@ -472,7 +549,7 @@ def main() -> int:
             item_summary = f"{label} from 10-Q filed {filing_date_10q} ({len(text)} chars)"
             artifacts.append({
                 "name": f"10q_{suffix}",
-                "path": f"artifacts/{filename}",
+                "path": f"knowledge/{filename}",
                 "format": "md",
                 "source": "sec-edgar",
                 "description": item_summary,
@@ -504,9 +581,12 @@ def main() -> int:
     # ======================================================================
     if not args.skip_8k:
         total_steps += 1
-        ok_8k, summaries_8k, err_8k = get_recent_8k(symbol, workdir)
-        if ok_8k and summaries_8k is not None:
+        ok_8k, result_8k, err_8k = get_recent_8k(symbol, workdir)
+        if ok_8k and result_8k is not None:
             success_steps += 1
+            summaries_8k = result_8k["summaries"]
+            doc_artifacts_8k = result_8k["doc_artifacts"]
+
             summary_8k = f"{len(summaries_8k)} 8-K filings in past year"
             artifacts.append({
                 "name": "8k_summary",
@@ -516,6 +596,8 @@ def main() -> int:
                 "description": summary_8k,
                 "summary": summary_8k,
             })
+            for doc_art in doc_artifacts_8k:
+                artifacts.append(doc_art)
         else:
             if err_8k:
                 errors.append(err_8k)

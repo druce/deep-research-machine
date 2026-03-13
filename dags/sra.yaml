@@ -97,13 +97,13 @@ tasks:
         ticker: "${ticker}"
         workdir: "${workdir}"
     outputs:
-      news_stories:       {path: "artifacts/news_stories.md", format: md, description: "Recent news stories and developments"}
-      business_profile:   {path: "artifacts/business_profile.md", format: md, description: "Narrative business overview: history, products, markets, strategy, and competitive positioning"}
-      executive_profiles: {path: "artifacts/executive_profiles.md", format: md, description: "Key executive bios: name, title, background, tenure, and notable achievements"}
-      risk:               {path: "artifacts/risk_analysis.md", format: md, description: "Risk analysis: regulatory, operational, market, financial, and strategic risks"}
-      investment_thesis:  {path: "artifacts/investment_thesis.md", format: md, description: "Investment thesis: investment rationale, catalysts, bull/bear cases, and valuation"}
-      competitive:        {path: "artifacts/competitive_analysis.md", format: md, description: "Competitive landscape: positioning, market share, key competitors, and differentiation"}
-      business_model:     {path: "artifacts/business_model_analysis.md", format: md, description: "Business model analysis: revenue streams, cost structure, unit economics, scalability, profitability, and moat / defensibility"}
+      news_stories:       {path: "knowledge/news_stories.md", format: md, description: "Recent news stories and developments"}
+      business_profile:   {path: "knowledge/business_profile.md", format: md, description: "Narrative business overview: history, products, markets, strategy, and competitive positioning"}
+      executive_profiles: {path: "knowledge/executive_profiles.md", format: md, description: "Key executive bios: name, title, background, tenure, and notable achievements"}
+      risk:               {path: "knowledge/risk_analysis.md", format: md, description: "Risk analysis: regulatory, operational, market, financial, and strategic risks"}
+      investment_thesis:  {path: "knowledge/investment_thesis.md", format: md, description: "Investment thesis: investment rationale, catalysts, bull/bear cases, and valuation"}
+      competitive:        {path: "knowledge/competitive_analysis.md", format: md, description: "Competitive landscape: positioning, market share, key competitors, and differentiation"}
+      business_model:     {path: "knowledge/business_model_analysis.md", format: md, description: "Business model analysis: revenue streams, cost structure, unit economics, scalability, profitability, and moat / defensibility"}
 
   # perplexity:
   #   sort_order: 5
@@ -132,8 +132,8 @@ tasks:
         workdir: "${workdir}"
     outputs:
       filings_index: {path: "artifacts/filings_index.json", format: json, description: "Index of all fetched SEC filings with filing type, date, accession number, and local file paths"}
-      10k_items:     {path: "artifacts/", format: md, description: "Extracted 10-K annual report sections: business overview, risk factors, MD&A, financial statements, and notes"}
-      10q_items:     {path: "artifacts/", format: md, description: "Extracted 10-Q quarterly report sections: MD&A, financial statements, and risk factor updates"}
+      10k_items:     {path: "knowledge/", format: md, description: "Extracted 10-K annual report sections: business overview, risk factors, MD&A, financial statements, and notes"}
+      10q_items:     {path: "knowledge/", format: md, description: "Extracted 10-Q quarterly report sections: MD&A, financial statements, and risk factor updates"}
       financials:    {path: "artifacts/", format: csv, description: "SEC-sourced financial data tables extracted from XBRL filings"}
       8k_summary:    {path: "artifacts/8k_summary.json", format: json, description: "Recent 8-K current report summaries: material events, management changes, financial results announcements"}
 
@@ -148,8 +148,8 @@ tasks:
         ticker: "${ticker}"
         workdir: "${workdir}"
     outputs:
-      wikipedia_summary: {path: "artifacts/wikipedia_summary.txt", format: txt, description: "Wikipedia article summary providing company history, operations, and public background"}
-      wikipedia_full:    {path: "artifacts/wikipedia_full.txt", format: txt, description: "Full Wikipedia article text with complete detail on company history, operations, and background"}
+      wikipedia_summary: {path: "knowledge/wikipedia_summary.txt", format: txt, description: "Wikipedia article summary providing company history, operations, and public background"}
+      wikipedia_full:    {path: "knowledge/wikipedia_full.txt", format: txt, description: "Full Wikipedia article text with complete detail on company history, operations, and background"}
 
   custom_research:
     sort_order: 8
@@ -548,7 +548,6 @@ tasks:
         - artifacts/cash_flow.csv
         - artifacts/analyst_recommendations.json
         - artifacts/technical_analysis.json
-        - artifacts/news_stories.md
         - artifacts/8k_summary.json
       prompt: |
         ${artifact_context_inline}
@@ -654,7 +653,6 @@ tasks:
         - artifacts/cash_flow.csv
         - artifacts/analyst_recommendations.json
         - artifacts/technical_analysis.json
-        - artifacts/news_stories.md
         - artifacts/8k_summary.json
       prompt: |
         ${artifact_context_inline}
@@ -772,7 +770,6 @@ tasks:
         - artifacts/cash_flow.csv
         - artifacts/analyst_recommendations.json
         - artifacts/technical_analysis.json
-        - artifacts/news_stories.md
         - artifacts/8k_summary.json
       prompt: |
         ${artifact_context_inline}
@@ -860,7 +857,6 @@ tasks:
         - artifacts/cash_flow.csv
         - artifacts/analyst_recommendations.json
         - artifacts/technical_analysis.json
-        - artifacts/news_stories.md
         - artifacts/8k_summary.json
       prompt: |
         ${artifact_context_inline}
@@ -948,7 +944,6 @@ tasks:
         - artifacts/cash_flow.csv
         - artifacts/analyst_recommendations.json
         - artifacts/technical_analysis.json
-        - artifacts/news_stories.md
         - artifacts/8k_summary.json
       prompt: |
         ${artifact_context_inline}
@@ -1038,7 +1033,6 @@ tasks:
         - artifacts/cash_flow.csv
         - artifacts/analyst_recommendations.json
         - artifacts/technical_analysis.json
-        - artifacts/news_stories.md
         - artifacts/8k_summary.json
       prompt: |
         ${artifact_context_inline}
@@ -1128,7 +1122,6 @@ tasks:
         - artifacts/cash_flow.csv
         - artifacts/analyst_recommendations.json
         - artifacts/technical_analysis.json
-        - artifacts/news_stories.md
         - artifacts/8k_summary.json
       prompt: |
         ${artifact_context_inline}
@@ -1151,12 +1144,9 @@ tasks:
 
         Write Section 8 of an equity research report on ${ticker}: Recent Developments, News Search and Risk Factors.
 
-        Use the comprehensive news research provided in the artifacts. Key sources:
-        - artifacts/news_stories.md — Recent developments, regulatory, strategic, and industry news
-        - artifacts/risk_analysis.md — Categorized risk analysis
-        - artifacts/investment_thesis.md — Bull/bear cases, key watchpoints
-        - artifacts/news.json — Recent news article summaries
-        - artifacts/sec_10k_item1a_risk_factors.md — SEC-filed risk factors
+        Use the comprehensive research data available. Key sources are in the LanceDB index (query via search_index.py above).
+        Structured data is inline above. Text sources (news stories, risk analysis, investment thesis, SEC filings)
+        are indexed in LanceDB and available via search.
 
         Synthesize these sources into a comprehensive section covering:
         • Recent corporate developments and their significance

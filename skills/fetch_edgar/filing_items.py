@@ -50,6 +50,34 @@ _10Q_ITEM_MAP: Dict[str, Tuple[str, str]] = {
     "Item 4":  ("item4_controls",      "Controls and Procedures"),
 }
 
+_8K_ITEM_MAP: Dict[str, str] = {
+    "Item 1.01": "Entry into a Material Definitive Agreement",
+    "Item 1.02": "Termination of a Material Definitive Agreement",
+    "Item 1.03": "Bankruptcy or Receivership",
+    "Item 2.01": "Completion of Acquisition or Disposition of Assets",
+    "Item 2.02": "Results of Operations and Financial Condition",
+    "Item 2.03": "Creation of a Direct Financial Obligation",
+    "Item 2.04": "Triggering Events That Accelerate an Obligation",
+    "Item 2.05": "Costs Associated with Exit or Disposal Activities",
+    "Item 2.06": "Material Impairments",
+    "Item 3.01": "Notice of Delisting or Transfer",
+    "Item 3.02": "Unregistered Sales of Equity Securities",
+    "Item 3.03": "Material Modification to Rights of Security Holders",
+    "Item 4.01": "Changes in Registrant's Certifying Accountant",
+    "Item 4.02": "Non-Reliance on Previously Issued Financial Statements",
+    "Item 5.01": "Changes in Control of Registrant",
+    "Item 5.02": "Departure/Appointment of Directors or Officers",
+    "Item 5.03": "Amendments to Articles of Incorporation or Bylaws",
+    "Item 5.04": "Temporary Suspension of Trading Under Employee Benefit Plans",
+    "Item 5.05": "Amendments to Code of Ethics",
+    "Item 5.06": "Change in Shell Company Status",
+    "Item 5.07": "Submission of Matters to a Vote of Security Holders",
+    "Item 5.08": "Shareholder Nominations",
+    "Item 7.01": "Regulation FD Disclosure",
+    "Item 8.01": "Other Events",
+    "Item 9.01": "Financial Statements and Exhibits",
+}
+
 
 # ============================================================================
 # Shared helpers
@@ -192,6 +220,7 @@ def get_10k_items(
 
     logger.info("Extracting 10-K items %s for %s", items, symbol)
     artifacts_dir = ensure_directory(workdir / "artifacts")
+    knowledge_dir = ensure_directory(workdir / "knowledge")
 
     try:
         company = get_company(symbol)
@@ -247,7 +276,7 @@ def get_10k_items(
                     label = item_key
 
                 filename = f"sec_10k_{suffix}.md"
-                out_path = artifacts_dir / filename
+                out_path = knowledge_dir / filename
 
                 with open(out_path, "w") as f:
                     f.write(f"# {label} (10-K filed {filing_date})\n\n")
@@ -306,6 +335,7 @@ def get_10q_items(
     items = list(SEC_10Q_ITEMS)
     logger.info("Extracting 10-Q items %s for %s", items, symbol)
     artifacts_dir = ensure_directory(workdir / "artifacts")
+    knowledge_dir = ensure_directory(workdir / "knowledge")
 
     try:
         company = get_company(symbol)
@@ -361,7 +391,7 @@ def get_10q_items(
                     label = item_key
 
                 filename = f"sec_10q_{suffix}.md"
-                out_path = artifacts_dir / filename
+                out_path = knowledge_dir / filename
 
                 with open(out_path, "w") as f:
                     f.write(f"# {label} (10-Q filed {filing_date})\n\n")

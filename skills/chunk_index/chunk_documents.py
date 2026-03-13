@@ -167,35 +167,28 @@ def main() -> int:
     args = parser.parse_args()
 
     workdir = Path(args.workdir)
-    artifacts_dir = workdir / "artifacts"
+    knowledge_dir = workdir / "knowledge"
 
-    # manifest.json is written by research.py before each wave, listing all
-    # artifacts produced by completed tasks. We iterate it to find text files.
-    manifest_path = artifacts_dir / "manifest.json"
-
-    if not manifest_path.exists():
-        print(json.dumps({"status": "failed", "error": "manifest.json not found", "artifacts": []}))
+    if not knowledge_dir.exists():
+        print(json.dumps({"status": "failed", "error": "knowledge/ directory not found", "artifacts": []}))
         return 1
 
-    manifest = json.loads(manifest_path.read_text())
     client = OpenAI()
     all_chunks = []
 
-    # Walk all artifacts from the manifest. Only text files (.md, .txt) get
-    # chunked — these are perplexity research, SEC filing extracts, wikipedia
-    # summaries, analysis outputs, etc. JSON data files and charts are skipped.
-    for entry in manifest:
-        file_path = workdir / entry["file"]
-        ext = file_path.suffix.lower()
-        if ext not in TEXT_EXTENSIONS:
+    # Walk all text files in knowledge/. This directory contains all text
+    # destined for the knowledge base: SEC filing extracts, wikipedia summaries,
+    # detailed profile analyses, custom research, etc. Structured data (JSON,
+    # CSV, PNG) stays in artifacts/ and is accessed directly by downstream tasks.
+    for file_path in sorted(knowledge_dir.glob("*")):
+        if file_path.suffix.lower() not in TEXT_EXTENSIONS:
             continue
-        if not file_path.exists():
-            logger.warning(f"Skipping missing file: {file_path}")
+        if not file_path.is_file():
             continue
         text = file_path.read_text(encoding="utf-8", errors="ignore")
         if not text.strip():
             continue
-        source = entry["file"]
+        source = f"knowledge/{file_path.name}"
         chunks = chunk_text(text, source)
         logger.info(f"  {source}: {len(chunks)} chunks")
         all_chunks.extend(chunks)

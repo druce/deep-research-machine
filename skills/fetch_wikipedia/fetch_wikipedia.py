@@ -296,8 +296,9 @@ def main() -> int:
 
     workdir = args.workdir or default_workdir(symbol)
 
-    # Ensure artifacts directory exists
-    artifacts_dir = ensure_directory(Path(workdir) / "artifacts")
+    # Ensure directories exist
+    ensure_directory(Path(workdir) / "artifacts")
+    knowledge_dir = ensure_directory(Path(workdir) / "knowledge")
 
     # Step 1: Resolve company name
     logger.info("Resolving company name for %s ...", symbol)
@@ -318,9 +319,9 @@ def main() -> int:
         print(json.dumps(manifest))
         return 2
 
-    # Step 3: Save summary artifact
+    # Step 3: Save summary artifact to knowledge/ (text → knowledge base)
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    output_path = artifacts_dir / "wikipedia_summary.txt"
+    output_path = knowledge_dir / "wikipedia_summary.txt"
 
     header = (
         f"Wikipedia Summary - {symbol}\n"
@@ -331,8 +332,8 @@ def main() -> int:
     output_path.write_text(header + "\n" + summary, encoding="utf-8")
     logger.info("Saved Wikipedia summary to %s", output_path)
 
-    # Step 3b: Save full page artifact
-    full_output_path = artifacts_dir / "wikipedia_full.txt"
+    # Step 3b: Save full page artifact to knowledge/
+    full_output_path = knowledge_dir / "wikipedia_full.txt"
     full_header = (
         f"Wikipedia Full Article - {symbol}\n"
         f"Company: {company_name}\n"
@@ -350,14 +351,14 @@ def main() -> int:
         "artifacts": [
             {
                 "name": "wikipedia_summary",
-                "path": "artifacts/wikipedia_summary.txt",
+                "path": "knowledge/wikipedia_summary.txt",
                 "format": "txt",
                 "source": "wikipedia",
                 "summary": summary_line,
             },
             {
                 "name": "wikipedia_full",
-                "path": "artifacts/wikipedia_full.txt",
+                "path": "knowledge/wikipedia_full.txt",
                 "format": "txt",
                 "source": "wikipedia",
                 "summary": f"{company_name} — full Wikipedia article, {len(full_content):,} chars",
