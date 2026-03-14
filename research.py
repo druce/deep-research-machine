@@ -949,6 +949,7 @@ async def main() -> int:
             import sqlite3
             db_path = workdir / "research.db"
             conn = sqlite3.connect(str(db_path))
+            conn.row_factory = sqlite3.Row
             failed = conn.execute(
                 "SELECT id FROM tasks WHERE status = 'failed'").fetchall()
             if failed:
