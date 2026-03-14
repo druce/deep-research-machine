@@ -254,6 +254,126 @@ def save_chart(symbol: str, work_dir: Path) -> bool:
 
 
 # ---------------------------------------------------------------------------
+# Indicator interpretation helpers
+# ---------------------------------------------------------------------------
+
+def _compute_trend_signals(
+    latest_close: float,
+    sma20_val, sma50_val, sma200_val,
+    rsi_val, macd_hist_val,
+    bb_upper_val, bb_lower_val,
+    vol_latest: float, vol_avg: float,
+) -> dict:
+    """Derive boolean trend signals from indicator values."""
+    signals = {}
+
+    # SMA trend
+    if sma50_val is not None and sma200_val is not None:
+        signals["golden_cross"] = sma50_val > sma200_val
+        signals["death_cross"] = sma50_val <= sma200_val
+
+    # Price vs SMAs
+    if sma20_val is not None:
+        signals["above_sma20"] = latest_close > sma20_val
+    if sma50_val is not None:
+        signals["above_sma50"] = latest_close > sma50_val
+    if sma200_val is not None:
+        signals["above_sma200"] = latest_close > sma200_val
+
+    # RSI zones
+    if rsi_val is not None:
+        signals["rsi_overbought"] = rsi_val > 70
+        signals["rsi_oversold"] = rsi_val < 30
+
+    # MACD signal
+    if macd_hist_val is not None:
+        signals["macd_bullish"] = macd_hist_val > 0
+        signals["macd_bearish"] = macd_hist_val < 0
+
+    # Bollinger position
+    if bb_upper_val is not None and bb_lower_val is not None:
+        signals["above_upper_bb"] = latest_close > bb_upper_val
+        signals["below_lower_bb"] = latest_close < bb_lower_val
+
+    # Volume signal
+    if vol_avg > 0:
+        signals["volume_above_avg"] = vol_latest > vol_avg
+
+    return signals
+
+
+def _build_narrative_analysis(
+    symbol: str, latest_close: float, latest_date: str,
+    sma50_val, sma200_val, rsi_val, macd_hist_val,
+    atr_val, bb_upper_val, bb_lower_val,
+) -> str:
+    """Build a human-readable narrative from computed indicator values."""
+    parts = [f"{symbol} closed at ${latest_close:.2f} on {latest_date}."]
+
+    # SMA analysis
+    sma_comments = []
+    if sma200_val is not None:
+        rel = "above" if latest_close > sma200_val else "below"
+        pct = ((latest_close - sma200_val) / sma200_val) * 100
+        sma_comments.append(
+            f"Price is {rel} the 200-day SMA (${sma200_val:.2f}), "
+            f"{pct:+.1f}% from it."
+        )
+    if sma50_val is not None:
+        rel = "above" if latest_close > sma50_val else "below"
+        sma_comments.append(
+            f"Price is {rel} the 50-day SMA (${sma50_val:.2f})."
+        )
+    if sma_comments:
+        parts.append(" ".join(sma_comments))
+
+    # RSI
+    if rsi_val is not None:
+        if rsi_val > 70:
+            rsi_comment = f"RSI({RSI_PERIOD}) is {rsi_val:.1f} (overbought territory)."
+        elif rsi_val < 30:
+            rsi_comment = f"RSI({RSI_PERIOD}) is {rsi_val:.1f} (oversold territory)."
+        else:
+            rsi_comment = f"RSI({RSI_PERIOD}) is {rsi_val:.1f} (neutral)."
+        parts.append(rsi_comment)
+
+    # MACD
+    if macd_hist_val is not None:
+        direction = "bullish" if macd_hist_val > 0 else "bearish"
+        parts.append(
+            f"MACD histogram is {direction} at {macd_hist_val:.2f}."
+        )
+
+    # ATR
+    if atr_val is not None:
+        parts.append(
+            f"ATR({ATR_PERIOD}) is ${atr_val:.2f}, indicating "
+            f"{'high' if atr_val > latest_close * 0.03 else 'moderate'} "
+            f"volatility."
+        )
+
+    # Bollinger
+    if bb_upper_val is not None and bb_lower_val is not None:
+        if latest_close > bb_upper_val:
+            bb_comment = "Price is above the upper Bollinger Band (potential overbought)."
+        elif latest_close < bb_lower_val:
+            bb_comment = "Price is below the lower Bollinger Band (potential oversold)."
+        else:
+            bb_pct = (
+                (latest_close - bb_lower_val)
+                / (bb_upper_val - bb_lower_val)
+                * 100
+            )
+            bb_comment = (
+                f"Price is at {bb_pct:.0f}% of the Bollinger Band range "
+                f"(${bb_lower_val:.2f} - ${bb_upper_val:.2f})."
+            )
+        parts.append(bb_comment)
+
+    return "\n".join(parts)
+
+
+# ---------------------------------------------------------------------------
 # save_technical_analysis
 # ---------------------------------------------------------------------------
 
@@ -340,114 +460,17 @@ def save_technical_analysis(symbol: str, work_dir: Path) -> dict:
         bb_middle_val = _last(bb_middle)
         bb_lower_val = _last(bb_lower)
 
-        # ----- Trend signals -----
-        trend_signals = {}
-
-        # SMA trend
-        if sma50_val is not None and sma200_val is not None:
-            if sma50_val > sma200_val:
-                trend_signals["golden_cross"] = True
-                trend_signals["death_cross"] = False
-            else:
-                trend_signals["golden_cross"] = False
-                trend_signals["death_cross"] = True
-
-        # Price vs SMAs
-        if sma20_val is not None:
-            trend_signals["above_sma20"] = latest_close > sma20_val
-        if sma50_val is not None:
-            trend_signals["above_sma50"] = latest_close > sma50_val
-        if sma200_val is not None:
-            trend_signals["above_sma200"] = latest_close > sma200_val
-
-        # RSI zones
-        if rsi_val is not None:
-            trend_signals["rsi_overbought"] = rsi_val > 70
-            trend_signals["rsi_oversold"] = rsi_val < 30
-
-        # MACD signal
-        if macd_hist_val is not None:
-            trend_signals["macd_bullish"] = macd_hist_val > 0
-            trend_signals["macd_bearish"] = macd_hist_val < 0
-
-        # Bollinger position
-        if bb_upper_val is not None and bb_lower_val is not None:
-            trend_signals["above_upper_bb"] = latest_close > bb_upper_val
-            trend_signals["below_lower_bb"] = latest_close < bb_lower_val
-
-        # Volume signal
-        if vol_avg > 0:
-            trend_signals["volume_above_avg"] = vol_latest > vol_avg
-
-        # ----- Narrative analysis -----
-        analysis_parts = []
-
-        # Price level
-        analysis_parts.append(
-            f"{symbol} closed at ${latest_close:.2f} on {latest_date}."
+        trend_signals = _compute_trend_signals(
+            latest_close, sma20_val, sma50_val, sma200_val,
+            rsi_val, macd_hist_val, bb_upper_val, bb_lower_val,
+            vol_latest, vol_avg,
         )
 
-        # SMA analysis
-        sma_comments = []
-        if sma200_val is not None:
-            rel = "above" if latest_close > sma200_val else "below"
-            pct = ((latest_close - sma200_val) / sma200_val) * 100
-            sma_comments.append(
-                f"Price is {rel} the 200-day SMA (${sma200_val:.2f}), "
-                f"{pct:+.1f}% from it."
-            )
-        if sma50_val is not None:
-            rel = "above" if latest_close > sma50_val else "below"
-            sma_comments.append(
-                f"Price is {rel} the 50-day SMA (${sma50_val:.2f})."
-            )
-        if sma_comments:
-            analysis_parts.append(" ".join(sma_comments))
-
-        # RSI
-        if rsi_val is not None:
-            if rsi_val > 70:
-                rsi_comment = f"RSI({RSI_PERIOD}) is {rsi_val:.1f} (overbought territory)."
-            elif rsi_val < 30:
-                rsi_comment = f"RSI({RSI_PERIOD}) is {rsi_val:.1f} (oversold territory)."
-            else:
-                rsi_comment = f"RSI({RSI_PERIOD}) is {rsi_val:.1f} (neutral)."
-            analysis_parts.append(rsi_comment)
-
-        # MACD
-        if macd_hist_val is not None:
-            direction = "bullish" if macd_hist_val > 0 else "bearish"
-            analysis_parts.append(
-                f"MACD histogram is {direction} at {macd_hist_val:.2f}."
-            )
-
-        # ATR
-        if atr_val is not None:
-            analysis_parts.append(
-                f"ATR({ATR_PERIOD}) is ${atr_val:.2f}, indicating "
-                f"{'high' if atr_val > latest_close * 0.03 else 'moderate'} "
-                f"volatility."
-            )
-
-        # Bollinger
-        if bb_upper_val is not None and bb_lower_val is not None:
-            if latest_close > bb_upper_val:
-                bb_comment = "Price is above the upper Bollinger Band (potential overbought)."
-            elif latest_close < bb_lower_val:
-                bb_comment = "Price is below the lower Bollinger Band (potential oversold)."
-            else:
-                bb_pct = (
-                    (latest_close - bb_lower_val)
-                    / (bb_upper_val - bb_lower_val)
-                    * 100
-                )
-                bb_comment = (
-                    f"Price is at {bb_pct:.0f}% of the Bollinger Band range "
-                    f"(${bb_lower_val:.2f} - ${bb_upper_val:.2f})."
-                )
-            analysis_parts.append(bb_comment)
-
-        analysis_text = "\n".join(analysis_parts)
+        analysis_text = _build_narrative_analysis(
+            symbol, latest_close, latest_date,
+            sma50_val, sma200_val, rsi_val, macd_hist_val,
+            atr_val, bb_upper_val, bb_lower_val,
+        )
 
         # ----- Assemble payload -----
         payload = {

@@ -485,7 +485,7 @@ def _build_manifest(symbol: str, work_dir: Path, task_results: dict) -> dict:
                 n_metrics = len(df)
                 # Count ticker columns (everything after Category and Metric)
                 n_tickers = df.shape[1] - 2
-                ticker_label = f"{symbol}"
+                ticker_label = symbol
                 if n_tickers > 1:
                     ticker_label += f" + {n_tickers - 1} peers"
                 summary = f"{n_metrics} ratios for {ticker_label}"

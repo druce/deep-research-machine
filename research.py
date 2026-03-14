@@ -402,6 +402,109 @@ async def _run_hard_check_rewrite(
     return draft_path, failures, hard_retry_count
 
 
+async def _run_critic_loop(
+    workdir: Path, task: dict, params: dict,
+    stem: str, suffix: str, draft_path: str,
+    n_iterations: int,
+    critic_prompt_template: str, rewrite_prompt_template: str,
+    primary_output: dict, primary_artifacts: list[dict],
+    task_mcp_config, task_extra_env, task_timeout: int,
+) -> dict:
+    """Run n_iterations of critic → rewrite cycles, publishing each rewrite.
+
+    Returns dict with keys: status, draft_path, and on failure: task_id, error,
+    artifacts, manifest.
+    """
+    for i in range(1, n_iterations + 1):
+        log(f"  [{task['id']}] Critic-optimizer iteration {i}/{n_iterations}")
+
+        # --- Critic step ---
+        critique_path = f"drafts/{stem}_critic_{i}{suffix}"
+        critic_prompt = (
+            critic_prompt_template
+            .replace("${draft_path}", draft_path)
+            .replace("${critique_path}", critique_path)
+        )
+        critic_outputs = {
+            f"critic_{i}": {"path": critique_path, "format": primary_output["format"]}
+        }
+
+        log(f"  [{task['id']}] Running critic {i}/{n_iterations}")
+        critic_result = await _invoke_claude(
+            prompt=critic_prompt,
+            workdir=workdir,
+            task_id=task["id"],
+            step_label=f"critic_{i}",
+            disallowed_tools=params.get("critic_disallowed_tools") or None,
+            system=params.get("system"),
+            model=params.get("critic_model") or params.get("model"),
+            max_budget_usd=params.get("max_budget_usd"),
+            expected_outputs=critic_outputs,
+            artifacts_inline=None,
+            mcp_config=task_mcp_config,
+            extra_env=task_extra_env,
+            timeout=task_timeout,
+        )
+
+        if critic_result["status"] != "complete":
+            return {
+                "status": "failed",
+                "task_id": task["id"],
+                "error": f"Critic iteration {i} failed: {critic_result['error']}",
+                "artifacts": primary_artifacts,
+                "manifest": None,
+            }
+
+        # --- Rewrite step ---
+        rewrite_path = f"drafts/{stem}_v{i}{suffix}"
+        rewrite_prompt = (
+            rewrite_prompt_template
+            .replace("${draft_path}", draft_path)
+            .replace("${critique_path}", critique_path)
+            .replace("${rewrite_path}", rewrite_path)
+        )
+        rewrite_outputs = {
+            f"rewrite_{i}": {"path": rewrite_path, "format": primary_output["format"]}
+        }
+
+        log(f"  [{task['id']}] Running rewrite {i}/{n_iterations}")
+        rewrite_result = await _invoke_claude(
+            prompt=rewrite_prompt,
+            workdir=workdir,
+            task_id=task["id"],
+            step_label=f"rewrite_{i}",
+            disallowed_tools=params.get("rewrite_disallowed_tools") or None,
+            system=params.get("system"),
+            model=params.get("rewrite_model") or params.get("model"),
+            max_budget_usd=params.get("max_budget_usd"),
+            expected_outputs=rewrite_outputs,
+            artifacts_inline=None,
+            mcp_config=task_mcp_config,
+            extra_env=task_extra_env,
+            timeout=task_timeout,
+        )
+
+        if rewrite_result["status"] != "complete":
+            return {
+                "status": "failed",
+                "task_id": task["id"],
+                "error": f"Rewrite iteration {i} failed: {rewrite_result['error']}",
+                "artifacts": primary_artifacts,
+                "manifest": None,
+            }
+
+        # Publish: copy rewrite to artifacts (overwrite primary output)
+        rewrite_file = workdir / rewrite_path
+        original_file = workdir / primary_output["path"]
+        if rewrite_file.exists():
+            shutil.copy2(str(rewrite_file), str(original_file))
+            log(f"  [{task['id']}] Published {rewrite_path} -> {primary_output['path']}")
+
+        draft_path = rewrite_path
+
+    return {"status": "complete", "draft_path": draft_path}
+
+
 async def run_claude_task(task: dict, workdir: Path) -> dict:
     """Run a claude task via claude CLI. Return result dict."""
     params = task["params"]
@@ -512,93 +615,19 @@ async def run_claude_task(task: dict, workdir: Path) -> dict:
 
         # Step 2b: Critic-optimizer loop (if configured)
         if has_critic_loop:
-            for i in range(1, n_iterations + 1):
-                log(f"  [{task['id']}] Critic-optimizer iteration {i}/{n_iterations}")
-
-                # --- Critic step ---
-                critique_path = f"drafts/{stem}_critic_{i}{suffix}"
-                critic_prompt = (
-                    critic_prompt_template
-                    .replace("${draft_path}", draft_path)
-                    .replace("${critique_path}", critique_path)
-                )
-                critic_outputs = {
-                    f"critic_{i}": {"path": critique_path, "format": primary_output["format"]}
-                }
-
-                log(f"  [{task['id']}] Running critic {i}/{n_iterations}")
-                critic_result = await _invoke_claude(
-                    prompt=critic_prompt,
-                    workdir=workdir,
-                    task_id=task["id"],
-                    step_label=f"critic_{i}",
-                    disallowed_tools=params.get("critic_disallowed_tools") or None,
-                    system=params.get("system"),
-                    model=params.get("critic_model") or params.get("model"),
-                    max_budget_usd=params.get("max_budget_usd"),
-                    expected_outputs=critic_outputs,
-                    artifacts_inline=None,
-                    mcp_config=task_mcp_config,
-                    extra_env=task_extra_env,
-                    timeout=task_timeout,
-                )
-
-                if critic_result["status"] != "complete":
-                    return {
-                        "task_id": task["id"],
-                        "status": "failed",
-                        "error": f"Critic iteration {i} failed: {critic_result['error']}",
-                        "artifacts": primary_artifacts,
-                        "manifest": None,
-                    }
-
-                # --- Rewrite step ---
-                rewrite_path = f"drafts/{stem}_v{i}{suffix}"
-                rewrite_prompt = (
-                    rewrite_prompt_template
-                    .replace("${draft_path}", draft_path)
-                    .replace("${critique_path}", critique_path)
-                    .replace("${rewrite_path}", rewrite_path)
-                )
-                rewrite_outputs = {
-                    f"rewrite_{i}": {"path": rewrite_path, "format": primary_output["format"]}
-                }
-
-                log(f"  [{task['id']}] Running rewrite {i}/{n_iterations}")
-                rewrite_result = await _invoke_claude(
-                    prompt=rewrite_prompt,
-                    workdir=workdir,
-                    task_id=task["id"],
-                    step_label=f"rewrite_{i}",
-                    disallowed_tools=params.get("rewrite_disallowed_tools") or None,
-                    system=params.get("system"),
-                    model=params.get("rewrite_model") or params.get("model"),
-                    max_budget_usd=params.get("max_budget_usd"),
-                    expected_outputs=rewrite_outputs,
-                    artifacts_inline=None,
-                    mcp_config=task_mcp_config,
-                    extra_env=task_extra_env,
-                    timeout=task_timeout,
-                )
-
-                if rewrite_result["status"] != "complete":
-                    return {
-                        "task_id": task["id"],
-                        "status": "failed",
-                        "error": f"Rewrite iteration {i} failed: {rewrite_result['error']}",
-                        "artifacts": primary_artifacts,
-                        "manifest": None,
-                    }
-
-                # Publish: copy rewrite to artifacts (overwrite primary output)
-                rewrite_file = workdir / rewrite_path
-                original_file = workdir / primary_output["path"]
-                if rewrite_file.exists():
-                    shutil.copy2(str(rewrite_file), str(original_file))
-                    log(f"  [{task['id']}] Published {rewrite_path} -> {primary_output['path']}")
-
-                # Update draft_path for next iteration
-                draft_path = rewrite_path
+            critic_result = await _run_critic_loop(
+                workdir=workdir, task=task, params=params,
+                stem=stem, suffix=suffix, draft_path=draft_path,
+                n_iterations=n_iterations,
+                critic_prompt_template=critic_prompt_template,
+                rewrite_prompt_template=rewrite_prompt_template,
+                primary_output=primary_output, primary_artifacts=primary_artifacts,
+                task_mcp_config=task_mcp_config, task_extra_env=task_extra_env,
+                task_timeout=task_timeout,
+            )
+            if critic_result["status"] == "failed":
+                return critic_result
+            draft_path = critic_result["draft_path"]
 
         # Step 2c: Hard checks on final output (after critic loop)
         if hard_checks_list:
