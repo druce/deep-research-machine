@@ -1,4 +1,17 @@
-"""Chunk, tag, and index pipeline for hybrid search over research artifacts."""
+"""Chunk, tag, and index pipeline for hybrid search over research artifacts.
+
+Shared constants and helpers for the 3-step indexing pipeline:
+  1. chunk_documents.py — split text into paragraph-boundary chunks, embed via OpenAI
+  2. tag_chunks (Claude task) — classify each chunk by report section relevance
+  3. build_index.py — merge chunks + tags into LanceDB with vector + FTS indexes
+
+This module provides:
+  - CHUNKS_SCHEMA: the Arrow schema for the LanceDB chunks table (lazy-loaded
+    to avoid requiring pyarrow at import time — tests that only need helpers
+    shouldn't pull in the full Arrow dependency).
+  - chunks_to_records(): converts embedded/tagged chunks to the LanceDB record
+    format with float32 vector casting.
+"""
 
 import sys
 from pathlib import Path

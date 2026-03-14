@@ -2,6 +2,23 @@
 """
 Hybrid vector + BM25 search over the LanceDB chunk index.
 
+This is the query interface used by both research agents and writers to retrieve
+relevant context from the indexed knowledge base. It combines two complementary
+search strategies via reciprocal rank fusion (RRF):
+
+  - **Vector search**: embeds the query via OpenAI, finds semantically similar
+    chunks (catches paraphrases, related concepts).
+  - **BM25 full-text search**: keyword matching with TF-IDF weighting (catches
+    exact terms, ticker symbols, financial metrics that embeddings might miss).
+
+RRF merges the two ranked lists without needing score normalization — each
+result's score is 1/(k + rank) summed across rankings. This is robust to the
+different score distributions of vector cosine similarity vs BM25.
+
+Section filtering (--sections) narrows results to chunks tagged with specific
+report sections (e.g. "financial", "competitive"), enabling writers to focus
+on their assigned topic without cross-contamination.
+
 Usage:
     ./skills/search_index/search_index.py QUERY --workdir DIR [--sections S1 S2] [--top-k N]
 

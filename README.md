@@ -137,15 +137,47 @@ PERPLEXITY_API_KEY=...    # Perplexity AI (optional, MCP research)
 
 No `ANTHROPIC_API_KEY` needed — all Claude tasks run via the Claude Code CLI subprocess.
 
+The MCP proxy also uses two runtime environment variables (set automatically by the orchestrator):
+- `MCP_CACHE_WORKDIR` — workdir path for the SQLite cache (`{workdir}/mcp-cache.db`)
+- `MCP_TASK_ID` — identifies which research task made each MCP call (for provenance tracking)
+
 ## Usage
 
 ### Full pipeline
 
 ```bash
-./research.py SYMBOL [--dag dags/sra.yaml] [--date YYYYMMDD]
+./research.py SYMBOL [--dag dags/sra.yaml] [--date YYYYMMDD] [--clean]
 ```
 
 The orchestrator validates the DAG, initializes the database, then executes waves of tasks in dependency order with parallel dispatch. Auto-skips failures and continues.
+
+### Resume a failed run
+
+```bash
+./research.py SYMBOL --resume [--retry-failed]
+```
+
+`--resume` picks up where a previous run left off — tasks stuck in `running` (from a crash) are reset to `pending`, and completed tasks are skipped. Add `--retry-failed` to also retry tasks that previously failed.
+
+### Run a single task
+
+```bash
+./research.py SYMBOL --task TASK_ID
+```
+
+Runs one task by ID (workdir must already be initialized). Useful for re-running a specific step after fixing an issue. Dependencies are checked but not re-run.
+
+### Web UI
+
+```bash
+uvicorn web:app --reload
+```
+
+The FastAPI web interface at `http://localhost:8000` provides:
+- `POST /run` — launch a pipeline run
+- `GET /status/{run_id}` — task-level status with DAG ordering
+- `GET /reports` — list completed reports
+- `WS /ws/{run_id}` — live log streaming via WebSocket
 
 ### Individual data scripts
 
@@ -214,7 +246,8 @@ uv run ./skills/db.py status --workdir work/AMD_20260225
 │   ├── assemble_report.md.j2       # Full report concatenation
 │   └── final_report.md.j2          # Final formatted report with charts
 ├── scripts/
-│   └── gen_mcp_configs.py          # Generate MCP configs from Claude Desktop
+│   ├── gen_mcp_configs.py          # Generate MCP configs from Claude Desktop
+│   └── show_prompt.py              # Display the full prompt for a Claude task
 ├── research.py                     # Async DAG orchestrator (entry point)
 ├── web.py                          # FastAPI web runner + WebSocket logs
 ├── tests/                          # pytest suite (210+ tests)

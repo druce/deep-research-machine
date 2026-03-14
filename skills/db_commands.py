@@ -412,7 +412,6 @@ def cmd_research_update(args: argparse.Namespace) -> None:
     }))
 
 
-
 def cmd_var_set(args: argparse.Namespace) -> None:
     """Set a runtime DAG variable."""
     conn = get_db(args.workdir)

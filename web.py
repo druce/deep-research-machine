@@ -5,6 +5,13 @@ web.py — FastAPI web runner for the stock research pipeline.
 Provides REST endpoints for launching research runs, checking status,
 viewing past reports, and a WebSocket for live log streaming.
 
+The web app spawns research.py as a subprocess per run and tracks it in the
+``running`` dict. WebSocket clients tail *_stream.log files from the workdir
+for real-time progress. On completion, the final report is auto-opened in Typora.
+
+Task sort order is loaded from the DAG YAML at import time so the status
+endpoint returns tasks in pipeline execution order rather than alphabetical.
+
 Usage:
     uvicorn web:app --reload
 """

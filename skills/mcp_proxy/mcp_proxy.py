@@ -2,8 +2,19 @@
 """
 MCP caching proxy — wraps any MCP server with SQLite result cache.
 
-Runs as a stdio MCP server. Internally connects to the real server.
-Caches all tool call results in {MCP_CACHE_WORKDIR}/mcp-cache.db.
+Sits between Claude research agents and external MCP data servers (FMP, Brave
+Search, etc.). When a tool is called, the proxy checks its SQLite cache before
+forwarding to the real server. Cache key is SHA256(tool_name|arguments_json),
+so identical queries from different research agents hit cache instead of making
+duplicate API calls.
+
+Requestor tracking: each cache entry records which research tasks (via
+MCP_TASK_ID env var) requested it. This lets the pipeline trace which data
+sources informed each section of the report without re-querying.
+
+The proxy is transparent — it advertises the same tool list as the real server,
+so Claude sees no difference. research.py wraps each MCP server definition with
+this proxy at pipeline start (see hydrate_mcp_configs).
 
 Usage (stdio transport):
     python mcp_proxy.py --transport stdio --command npx --args "-y,@pkg/server"
@@ -14,6 +25,7 @@ Usage (HTTP/SSE transport):
 Environment:
     MCP_CACHE_WORKDIR  Path to workdir — cache stored at {workdir}/mcp-cache.db
                        If unset, proxy passes through without caching.
+    MCP_TASK_ID        ID of the requesting research task (for requestor tracking).
 """
 import argparse
 import asyncio
