@@ -134,7 +134,6 @@ def main() -> int:
         "income_statement_sankey_path": "income_statement_sankey.png",
         "deep_summary": None,
         "deep_research_output": report_body,
-        "deep_conclusion": None,
     }
 
     # Render template

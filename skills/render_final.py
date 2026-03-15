@@ -207,9 +207,6 @@ def build_variables(artifacts_dir: Path) -> Dict[str, Any]:
         or load_text(artifacts_dir / "report_body.md")
         or load_text(artifacts_dir / "assembled_body.md")
     )
-    variables["deep_conclusion"] = load_text(
-        artifacts_dir / "conclusion.md"
-    )
 
     return variables
 
