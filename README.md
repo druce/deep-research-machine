@@ -11,7 +11,7 @@ A steerable research and report-writing pipeline powered by Claude Code. Define 
 
 ## Example Report
 
-![NVIDIA Corporation Equity Research Report](assets/images/nvda_report_combined.png)
+![NVIDIA Corporation Equity Research Report](nvda_report_combined.png)
 
 [NVDA — March 16, 2026]()
 
