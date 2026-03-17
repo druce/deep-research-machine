@@ -11,7 +11,9 @@ A steerable research and report-writing pipeline powered by Claude Code. Define 
 
 ## Example Report
 
-[NVDA — March 16, 2026](https://github.com/druce/deep-research-machine/raw/master/AMZN.pdf)
+![NVIDIA Corporation Equity Research Report](assets/images/nvda_report_combined.png)
+
+[NVDA — March 16, 2026]()
 
 ## How It Works
 
