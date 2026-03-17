@@ -1,6 +1,6 @@
 # Stock Research Agent
 
-One command, full analyst-style equity research report.
+One command, full institutional-quality equity research report.
 
 ```bash
 ./research.py NVDA
