@@ -1,22 +1,27 @@
 # Stock Research Agent
 
-An async Python-orchestrated equity research pipeline that generates comprehensive analyst-style reports. A single script drives a DAG of data-gathering tasks and Claude writing agents, producing a polished report from one command.
+One command, full analyst-style equity research report.
+
+```bash
+./research.py NVDA
+# → work/NVDA_20260317/artifacts/final_report.md
+```
+
+A steerable research and report-writing pipeline powered by Claude Code. Define an outline as a DAG, point it at data sources, and get a structured report — currently configured for equity research, but the engine is generic.
+
+## Example Report
+
+[NVDA — March 16, 2026](https://github.com/druce/deep-research-machine/blob/master/work/NVDA_20260316/artifacts/final_report.md)
 
 ## How It Works
 
-Write an equity research report in a structured format with 7 main sections (profile, business model, competitive landscape, supply chain, financials, valuation, risk/news). The pipeline:
+The pipeline runs ~33 tasks in dependency order: gather data, index it, research it, write sections, assemble a report.
 
-- **Gather 'foundational' data** — fetch company profile, peers, technical indicators, fundamentals, SEC filings (10-K/10-Q/8-K), Wikipedia summary, charts, news. Each task outputs JSON/text artifacts to `work/{SYMBOL}_{DATE}/artifacts/`
-- **Chunk & index** — split the longer text artifacts into chunks, embed them, and store in LanceDB with vector + BM25 indexes. Tag each chunk by which report section(s) it's relevant to (profile, competitive, financial, etc.)
-- **Research** — 7 agents run in parallel, one per section. Each queries LanceDB for relevant chunks and uses MCP market data tools to dig deeper. Findings go back into LanceDB, tagged by section — one researcher can surface material useful to other sections
-- **Write** — 7 writers run in parallel, each querying the unified LanceDB index (original data + all research findings) with section-specific filters. Each goes through a critic-rewrite loop
-- **Assemble** — concatenate 7 sections, write conclusion, write intro, assemble full text, run a final critique-polish pass, render to markdown/HTML/PDF
-
-```bash
-./research.py AMD --date 20260225
-```
-
-This triggers a 33-task pipeline:
+1. **Gather data** — Python scripts fetch company profile, financials, SEC filings, technical indicators, Wikipedia, and custom research questions
+2. **Chunk & index** — text artifacts are split into chunks, embedded, and stored in a LanceDB hybrid (vector + BM25) index, tagged by report section
+3. **Research** — 7 agents run in parallel, each querying the index and using MCP tools to dig deeper. Findings flow back into the index so researchers can build on each other's work
+4. **Write** — 7 section writers run in parallel, each querying the unified index. Each goes through a critic-rewrite loop
+5. **Assemble** — sections are concatenated, conclusion and intro written, a final critique-polish pass applied, and the report rendered to markdown/HTML/PDF
 
 ```mermaid
 flowchart TD
@@ -64,41 +69,27 @@ flowchart TD
 
 Colors: blue = data gathering & indexing, purple = research, orange = writing & editing, green = final assembly.
 
-## Architecture
+## What Makes It Different
 
-**Orchestrator:** `research.py` — a single async Python script that reads the DAG, initializes the database, and runs waves of tasks as parallel subprocesses. Python data-gathering tasks run via `uv run python`, Claude writing tasks run via `claude --dangerously-skip-permissions -p`. All database writes are centralized in the orchestrator.
+**DAG + Claude Code hybrid.** The orchestrator (`research.py`) runs a dependency graph where each node is either a Python script or a `claude -p` subprocess with full tool access. This combines the reliability of a state machine (retries, resume, parallel dispatch) with the flexibility of autonomous Claude agents (web search, code execution, MCP tools).
 
-**State management**: One SQLite database per run (`work/{SYMBOL}_{DATE}/research.db`) tracks task status, dependencies, artifacts, and runtime variables. All components access state through `skills/db.py` — no direct SQL elsewhere.
+**Steerable.** The report outline, research questions, writing prompts, style guide, and data sources are all configuration — not code. Change what gets researched and how it's written without touching the pipeline.
 
-**Artifact context**: A `manifest.json` file is maintained before each wave, listing all produced artifacts. Claude tasks read this file to discover available research data.
+**Extensible.** Add data sources by writing a Python script or adding MCP tools. Add report sections by editing the DAG. The pipeline doesn't know or care what "equity research" means — it just runs tasks in order.
 
-**DAG definition**: `dags/sra.yaml` declares tasks, types, dependencies, configs, and expected outputs in a version-2 schema validated by Pydantic.
+## Customization
 
-## Data Sources
+| What | Where | How |
+|------|-------|-----|
+| **Research questions** | `custom_prompts.json` in workdir | Add investigation prompts run by parallel Claude subprocesses |
+| **Report sections** | `dags/sra.yaml` | Add, remove, or reorder sections; adjust dependencies |
+| **Writing prompts** | `dags/sra.yaml` task configs | Edit the system/user prompts for each writer and critic |
+| **Style guide** | `STYLE.md` | Set tone, source hierarchy, formatting rules |
+| **Critic iterations** | `dags/sra.yaml` `n_iterations` | Control how many critic-rewrite passes each section gets |
+| **Data sources** | `.env` + MCP config + Python scripts | Add API keys, MCP servers, or write new fetch scripts |
+| **Report templates** | `templates/*.md.j2` | Modify Jinja2 templates for final assembly |
 
-| Source | What it provides |
-|--------|-----------------|
-| **yfinance** | Price history, fundamentals, analyst recommendations |
-| **TA-Lib** | Technical indicators (SMA, RSI, MACD, ATR, Bollinger Bands) |
-| **OpenBB / FMP** | Financial statements, key ratios, peer comparisons |
-| **Finnhub** | Peer company detection |
-| **SEC EDGAR** | 10-K, 10-Q, 8-K filings via edgartools |
-| **Wikipedia** | Company history and background |
-| **Claude subagents** | Report writing, critique, and revision |
-
-## Output
-
-Each run produces `work/{SYMBOL}_{DATE}/artifacts/` containing 40+ files:
-
-- `final_report.md` — the complete formatted report
-- `chart.png` — stock price chart with technical overlays
-- `profile.json`, `technical_analysis.json` — structured data
-- `income_statement.csv`, `balance_sheet.csv`, `cash_flow.csv`, `key_ratios.csv` — financials
-- `draft_report_body.md`, `draft_report_conclusion.md`, `draft_intro.md` — draft sections
-- `report_body.md`, `report_critique.md`, `report_body_final.md` — critique/revise cycle
-- SEC filing extracts, Wikipedia summaries
-
-## Setup
+## Quick Start
 
 ### Prerequisites
 
@@ -110,12 +101,12 @@ Each run produces `work/{SYMBOL}_{DATE}/artifacts/` containing 40+ files:
 ### Install
 
 ```bash
-# Install system dependencies (macOS)
+# System dependencies (macOS)
 brew install pandoc ta-lib
 export TA_INCLUDE_PATH="$(brew --prefix ta-lib)/include"
 export TA_LIBRARY_PATH="$(brew --prefix ta-lib)/lib"
 
-# Install Python dependencies
+# Python dependencies
 uv sync
 ```
 
@@ -126,7 +117,7 @@ Create a `.env` file in the project root:
 ```
 SEC_FIRM=...              # SEC EDGAR identity (firm name)
 SEC_USER=...              # SEC EDGAR identity (email)
-OPENAI_API_KEY=...        # for chunk embeddings (text-embedding-3-small)
+OPENAI_API_KEY=...        # Chunk embeddings (text-embedding-3-small)
 OPENBB_PAT=...            # OpenBB Platform access token
 FMP_API_KEY=...           # Financial Modeling Prep API key
 FINNHUB_API_KEY=...       # Finnhub API key (peer detection)
@@ -137,9 +128,11 @@ PERPLEXITY_API_KEY=...    # Perplexity AI (optional, MCP research)
 
 No `ANTHROPIC_API_KEY` needed — all Claude tasks run via the Claude Code CLI subprocess.
 
-The MCP proxy also uses two runtime environment variables (set automatically by the orchestrator):
-- `MCP_CACHE_WORKDIR` — workdir path for the SQLite cache (`{workdir}/mcp-cache.db`)
-- `MCP_TASK_ID` — identifies which research task made each MCP call (for provenance tracking)
+### Run
+
+```bash
+./research.py NVDA
+```
 
 ## Usage
 
@@ -149,15 +142,13 @@ The MCP proxy also uses two runtime environment variables (set automatically by 
 ./research.py SYMBOL [--dag dags/sra.yaml] [--date YYYYMMDD] [--clean]
 ```
 
-The orchestrator validates the DAG, initializes the database, then executes waves of tasks in dependency order with parallel dispatch. Auto-skips failures and continues.
-
 ### Resume a failed run
 
 ```bash
 ./research.py SYMBOL --resume [--retry-failed]
 ```
 
-`--resume` picks up where a previous run left off — tasks stuck in `running` (from a crash) are reset to `pending`, and completed tasks are skipped. Add `--retry-failed` to also retry tasks that previously failed.
+`--resume` picks up where a previous run left off — tasks stuck in `running` are reset to `pending`, completed tasks are skipped. Add `--retry-failed` to also retry tasks that previously failed.
 
 ### Run a single task
 
@@ -165,7 +156,7 @@ The orchestrator validates the DAG, initializes the database, then executes wave
 ./research.py SYMBOL --task TASK_ID
 ```
 
-Runs one task by ID (workdir must already be initialized). Useful for re-running a specific step after fixing an issue. Dependencies are checked but not re-run.
+Runs one task by ID (workdir must already exist). Useful for re-running a specific step after fixing an issue.
 
 ### Web UI
 
@@ -173,100 +164,56 @@ Runs one task by ID (workdir must already be initialized). Useful for re-running
 uvicorn web:app --reload
 ```
 
-The FastAPI web interface at `http://localhost:8000` provides:
-- `POST /run` — launch a pipeline run
-- `GET /status/{run_id}` — task-level status with DAG ordering
-- `GET /reports` — list completed reports
-- `WS /ws/{run_id}` — live log streaming via WebSocket
+FastAPI interface at `http://localhost:8000` with live log streaming via WebSocket.
 
-### Individual data scripts
+## Data Sources
 
-Each data-gathering script runs standalone:
+| Source | What it provides |
+|--------|-----------------|
+| **yfinance** | Price history, fundamentals, analyst recommendations |
+| **TA-Lib** | Technical indicators (SMA, RSI, MACD, ATR, Bollinger Bands) |
+| **OpenBB / FMP** | Financial statements, key ratios, peer comparisons |
+| **Finnhub** | Peer company detection |
+| **SEC EDGAR** | 10-K, 10-Q, 8-K filings via edgartools |
+| **Wikipedia** | Company history and background |
+| **Brave / Perplexity** | Web search for research agents (via MCP) |
+| **Claude subagents** | Report writing, critique, and revision |
 
-```bash
-uv run ./skills/fetch_profile/fetch_profile.py AMD --workdir work/AMD_20260225
-uv run ./skills/fetch_technical/fetch_technical.py AMD --workdir work/AMD_20260225
-uv run ./skills/fetch_fundamental/fetch_fundamental.py AMD --workdir work/AMD_20260225
-uv run ./skills/fetch_edgar/fetch_edgar.py AMD --workdir work/AMD_20260225
-uv run ./skills/fetch_wikipedia/fetch_wikipedia.py AMD --workdir work/AMD_20260225
-```
+## Output
 
-### Database CLI
+Each run produces `work/{SYMBOL}_{DATE}/artifacts/` containing 40+ files:
 
-```bash
-uv run ./skills/db.py init --workdir work/AMD_20260225 --dag dags/sra.yaml --ticker AMD
-uv run ./skills/db.py task-ready --workdir work/AMD_20260225
-uv run ./skills/db.py status --workdir work/AMD_20260225
-```
-
-### Template rendering
-
-```bash
-# Generic template renderer
-./skills/render_template.py \
-  --template templates/assemble_report.md.j2 \
-  --output work/AMD_20260225/artifacts/report_body.md \
-  --json work/AMD_20260225/artifacts/profile.json \
-  --file intro=work/AMD_20260225/artifacts/draft_intro.md \
-  --file body=work/AMD_20260225/artifacts/draft_report_body.md
-
-# Final report assembly (loads all artifacts automatically)
-./skills/render_final.py --workdir work/AMD_20260225
-```
+- `final_report.md` — the complete formatted report
+- `chart.png` — stock price chart with technical overlays
+- `profile.json`, `technical_analysis.json` — structured data
+- `income_statement.csv`, `balance_sheet.csv`, `cash_flow.csv`, `key_ratios.csv` — financials
+- Section drafts, critic feedback, and revision history in `drafts/`
 
 ## Project Structure
 
 ```
+├── research.py                     # Async DAG orchestrator (entry point)
+├── web.py                          # FastAPI web runner + WebSocket logs
 ├── dags/
 │   └── sra.yaml                    # DAG definition (33 tasks, v2 schema)
 ├── skills/
 │   ├── db.py                       # SQLite state management CLI
-│   ├── db_commands.py              # DB command implementations
 │   ├── schema.py                   # Pydantic DAG validation models
 │   ├── config.py                   # Centralized constants
-│   ├── utils.py                    # Shared utilities
-│   ├── claude_runner.py            # Claude CLI subprocess runner
-│   ├── assemble_text.py            # Section concatenation
-│   ├── final_assembly.py           # Final report assembly
-│   ├── render_template.py          # Generic Jinja2 renderer
-│   ├── render_final.py             # Final report rendering (pandoc)
-│   ├── fetch_profile/              # Company profile
-│   ├── identify_peers/             # Peer identification
+│   ├── fetch_profile/              # Company profile + peers
 │   ├── fetch_technical/            # Chart + technical indicators
 │   ├── fetch_fundamental/          # Financials, ratios, analyst data
 │   ├── fetch_edgar/                # SEC filings
 │   ├── fetch_wikipedia/            # Wikipedia summary
-│   ├── fetch_detailed_profile_info/ # Parallel web-search profile tasks
 │   ├── custom_research/            # User-provided investigation prompts
 │   ├── chunk_index/                # Chunk, tag, build LanceDB index
 │   ├── search_index/               # Hybrid vector + BM25 search
-│   └── mcp_proxy/                  # MCP caching proxy with requestor tracking
-├── templates/
-│   ├── assemble_body.md.j2         # Body section concatenation
-│   ├── assemble_report.md.j2       # Full report concatenation
-│   └── final_report.md.j2          # Final formatted report with charts
-├── scripts/
-│   ├── gen_mcp_configs.py          # Generate MCP configs from Claude Desktop
-│   └── show_prompt.py              # Display the full prompt for a Claude task
-├── research.py                     # Async DAG orchestrator (entry point)
-├── web.py                          # FastAPI web runner + WebSocket logs
+│   └── mcp_proxy/                  # MCP caching proxy
+├── templates/                      # Jinja2 report assembly templates
 ├── tests/                          # pytest suite (210+ tests)
 └── work/                           # Output (one dir per run)
     └── {SYMBOL}_{DATE}/
-        ├── research.db
-        ├── mcp-cache.db
-        ├── drafts/
-        └── artifacts/
+        ├── research.db             # Task state
+        ├── artifacts/              # Final outputs
+        └── drafts/                 # Iteration history
 ```
-
-## Script Conventions
-
-All Python scripts follow a consistent pattern:
-
-- `#!/usr/bin/env python3` shebang
-- Import constants from `config.py`, utilities from `utils.py`
-- `pathlib.Path` for all path operations
-- `logger = setup_logging(__name__)` for output (stderr only)
-- JSON manifest to stdout: `{"status": "complete", "artifacts": [...], "error": null}`
-- Exit codes: 0 = success, 1 = partial, 2 = failure
-- Type hints on all functions, specific exception handling
