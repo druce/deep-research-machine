@@ -17,7 +17,7 @@ Enhances the [Claude for Financial Services plugins](https://github.com/anthropi
 
 ![NVIDIA Corporation Equity Research Report](nvda_report_combined.png)
 
-[NVDA — March 16, 2026]()
+[NVDA — March 16, 2026](https://druce.ai/assets/2025/NVDA.pdf)
 
 ## How It Works
 
