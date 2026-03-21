@@ -32,13 +32,23 @@ def cmd_init(args: argparse.Namespace) -> None:
     configure_connection(conn)
     conn.executescript(SCHEMA)
 
-    # Parse and validate DAG YAML
+    # Parse and validate DAG YAML (Jinja2 pre-pass for length presets)
     dag_path = Path(args.dag)
     if not dag_path.exists():
         error_exit(f"DAG file not found: {dag_path}")
 
-    with dag_path.open('r') as f:
-        raw = yaml.safe_load(f)
+    from jinja2 import Environment, BaseLoader, Undefined
+    raw_text = dag_path.read_text()
+    length = getattr(args, 'length', 'standard')
+    jinja_vars = {
+        'SHORT': length == 'short',
+        'LONG': length == 'long',
+        'LENGTH': length,
+    }
+    jinja_env = Environment(loader=BaseLoader(), undefined=Undefined,
+                            keep_trailing_newline=True)
+    rendered = jinja_env.from_string(raw_text).render(jinja_vars)
+    raw = yaml.safe_load(rendered)
 
     # Variable substitution + Pydantic validation
     variables = {
@@ -97,6 +107,12 @@ def cmd_init(args: argparse.Namespace) -> None:
                 "INSERT OR IGNORE INTO task_deps (task_id, depends_on) VALUES (?, ?)",
                 (task_id, dep)
             )
+
+    # Store length preset as a dag_var for resume
+    conn.execute(
+        "INSERT OR REPLACE INTO dag_vars (name, value, source_task) VALUES (?, ?, NULL)",
+        ('length', length)
+    )
 
     conn.commit()
     conn.close()
@@ -519,8 +535,18 @@ def cmd_validate(args: argparse.Namespace) -> None:
     if not dag_path.exists():
         error_exit(f"DAG file not found: {dag_path}")
 
-    with dag_path.open('r') as f:
-        raw = yaml.safe_load(f)
+    from jinja2 import Environment, BaseLoader, Undefined
+    raw_text = dag_path.read_text()
+    length = getattr(args, 'length', 'standard')
+    jinja_vars = {
+        'SHORT': length == 'short',
+        'LONG': length == 'long',
+        'LENGTH': length,
+    }
+    jinja_env = Environment(loader=BaseLoader(), undefined=Undefined,
+                            keep_trailing_newline=True)
+    rendered = jinja_env.from_string(raw_text).render(jinja_vars)
+    raw = yaml.safe_load(rendered)
 
     variables = {
         'ticker': args.ticker,

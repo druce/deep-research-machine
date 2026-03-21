@@ -160,6 +160,8 @@ def main() -> int:
     p_init.add_argument('--ticker', required=True, help='Stock ticker symbol')
     p_init.add_argument('--date', default=datetime.now().strftime('%Y%m%d'),
                         help='Date string (YYYYMMDD, defaults to today)')
+    p_init.add_argument('--length', choices=['short', 'standard', 'long'],
+                        default='standard', help='Report length preset')
 
     # task-ready
     p_ready = subparsers.add_parser('task-ready', help='List ready tasks')

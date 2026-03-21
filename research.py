@@ -799,7 +799,7 @@ async def process_results(results: list[dict], workdir: Path, tasks: list[dict])
     return completed, failed
 
 
-async def init_pipeline(ticker: str, dag: str, date: str) -> Path:
+async def init_pipeline(ticker: str, dag: str, date: str, length: str = "standard") -> Path:
     """Validate DAG, create workdir, initialize DB. Return workdir Path."""
     # Validate
     result = await run_db("validate", "--dag", dag, "--ticker", ticker)
@@ -807,10 +807,13 @@ async def init_pipeline(ticker: str, dag: str, date: str) -> Path:
 
     # Init
     workdir = Path("work") / f"{ticker}_{date}"
-    result = await run_db(
+    init_args = [
         "init", "--workdir", str(workdir), "--dag", dag,
         "--ticker", ticker, "--date", date,
-    )
+    ]
+    if length != "standard":
+        init_args += ["--length", length]
+    result = await run_db(*init_args)
     log(f"DB initialized: {result['workdir']}")
 
     # Create knowledge/ directory for research findings
@@ -881,6 +884,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--task", metavar="TASK_ID",
         help="Run a single task by ID (workdir must already be initialized)",
+    )
+    parser.add_argument(
+        "--length", choices=["short", "standard", "long"], default="standard",
+        help="Report section length preset (default: standard)",
     )
     return parser.parse_args()
 
@@ -1010,7 +1017,7 @@ async def main() -> int:
                 shutil.rmtree(candidate)
 
         try:
-            workdir = await init_pipeline(ticker, args.dag, args.date)
+            workdir = await init_pipeline(ticker, args.dag, args.date, args.length)
         except RuntimeError as e:
             log(f"Initialization failed: {e}")
             return 1

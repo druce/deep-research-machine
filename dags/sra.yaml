@@ -13,17 +13,12 @@ dag:
       1. SEC filings (10-K, 10-Q, 8-K) — current authoritative for all disclosed facts
       2. MCP tool results (FMP, OpenBB, Finnhub) — authoritative for current market data
       3. Structured artifacts (CSV/JSON in artifacts/) — derived from sources 1-2
-      4. Perplexity analysis, custom research — supplementary
-      5. Wikipedia and web pages — background context only, never cite for financial data
+      4. Custom research, Wikipedia and web pages — background context only, never cite for financial data
 
       **Reconciliation rule:** When two sources disagree on a number (e.g., revenue, margins,
       EBITDA), use the SEC filing value. If no SEC value exists, use the structured artifact
       (key_facts.json). Note the discrepancy: "Note: [source A] reports X while [source B]
       reports Y; using SEC filing value."
-
-      **Quantitative anchor rule:** Every section heading MUST have at least one specific
-      number (dollar amount, percentage, date, or count) in the paragraph below it.
-      Before saving, scan every ## heading — if any lacks a data point, search for one.
 
       **Citation rule:** Every quantitative claim MUST have an inline source citation.
       Format: (Source: 10-K Item 1A), (Source: key_facts.json), (Source: FMP company-profile), etc.
@@ -45,7 +40,7 @@ dag:
   allowed_tools: all # not implemented, all allowed, in future limit tools
 
 tasks:
-  # --- Data gathering tasks ---
+  # --- Initial data gathering tasks ---
   profile:
     sort_order: 1
     description: Get company profile data based on symbol
@@ -124,21 +119,6 @@ tasks:
       competitive:        {path: "knowledge/competitive_analysis.md", format: md, description: "Competitive landscape: positioning, market share, key competitors, and differentiation"}
       business_model:     {path: "knowledge/business_model_analysis.md", format: md, description: "Business model analysis: revenue streams, cost structure, unit economics, scalability, profitability, and moat / defensibility"}
 
-  # perplexity:
-  #   sort_order: 5
-  #   description: Research news, business profile, and executives via Perplexity AI
-  #   type: python
-  #   depends_on: [profile, peers]
-  #   config:
-  #     script: skills/fetch_perplexity/fetch_perplexity.py
-  #     args:
-  #       ticker: "${ticker}"
-  #       workdir: "${workdir}"
-  #   outputs:
-  #     news_stories:       {path: "artifacts/news_stories.md", format: md, description: "Recent news stories and developments sourced via Perplexity AI with citations"}
-  #     business_profile:   {path: "artifacts/business_profile.md", format: md, description: "Narrative business overview: history, products, markets, strategy, and competitive positioning via Perplexity AI"}
-  #     executive_profiles: {path: "artifacts/executive_profiles.md", format: md, description: "Key executive bios: name, title, background, tenure, and notable achievements via Perplexity AI"}
-
   fetch_edgar:
     sort_order: 6
     description: Fetch SEC filings (10-K, 10-Q, 8-K) via edgartools
@@ -183,23 +163,7 @@ tasks:
     outputs:
       custom_research_tags: {path: "artifacts/custom_research_tags.json", format: json, description: "Section relevance tags for each custom research response"}
 
-  # perplexity_analysis:
-  #   sort_order: 8
-  #   description: Generate business model, competitive, risk, and investment analysis via Perplexity
-  #   type: python
-  #   depends_on: [profile, peers]
-  #   config:
-  #     script: skills/fetch_perplexity_analysis/fetch_perplexity_analysis.py
-  #     args:
-  #       ticker: "${ticker}"
-  #       workdir: "${workdir}"
-  #   outputs:
-  #     business_model: {path: "artifacts/business_model_analysis.md", format: md, description: "Business model deep-dive: revenue streams, unit economics, scalability, and moat analysis via Perplexity AI"}
-  #     competitive:    {path: "artifacts/competitive_analysis.md", format: md, description: "Competitive landscape: market share, key rivals, differentiation, and positioning analysis via Perplexity AI"}
-  #     risk:           {path: "artifacts/risk_analysis.md", format: md, description: "Risk factor analysis: regulatory, market, operational, financial, and strategic risks via Perplexity AI"}
-  #     investment:     {path: "artifacts/investment_thesis.md", format: md, description: "Investment thesis: bull/bear cases, catalysts, valuation considerations, and recommendation framework via Perplexity AI"}
-
-  # --- Chunk, tag, and index wave ---
+  # --- Chunk, tag, and index 1st wave ---
   # chunk docs and embed chunks in chunks.json
   chunk_documents:
     sort_order: 10
@@ -314,46 +278,46 @@ tasks:
         - Financial metrics
         - Recent company news
 
-        **Step 0: Decompose your research brief into specific questions.**
-        Before searching, break this topic into 5-10 specific questions you need to answer.
-        For each question, formulate 2-3 search queries using different terminology
-        (synonyms, related concepts). For example, "founding story" might also be searched
-        as "company history origin", "when was {company} founded", "founder background".
-        This ensures comprehensive retrieval from the index.
+        1. **Decompose your research brief into specific questions.**
+          Before searching, break this topic into 5-10 specific questions you need to answer.
+          For each question, formulate 2-3 search queries using different terminology
+          (synonyms, related concepts). For example, "founding story" might also be searched
+          as "company history origin", "when was {company} founded", "founder background".
+          This ensures comprehensive retrieval from the index.
 
-        **Step 0.5: Read authoritative baselines.**
-        Read artifacts/key_facts.json — this contains verified financial metrics extracted
-        from structured data. Use these numbers as ground truth. If you find a conflicting
-        number in the index or MCP results, note the discrepancy and prefer key_facts.json
-        for SEC-derived data, or MCP for current market data.
+        2. **Read authoritative baselines.**
+          Read artifacts/key_facts.json — this contains verified financial metrics extracted
+          from structured data. Use these numbers as ground truth. If you find a conflicting
+          number in the index or MCP results, note the discrepancy and prefer key_facts.json
+          for SEC-derived data, or MCP for current market data.
 
-        1. Retrieve everything already discovered for this section:
+        3. **Retrieve everything already discovered for this section:**
           Run: uv run python skills/search_index/search_index.py --all --workdir ${workdir} --sections profile
           Read artifacts/manifest.json for a description of all available artifacts and review relevant artifacts.
           Review these results carefully — this is what we already have from SEC filings, Wikipedia, and other ingested sources.
 
-          Also run cross-section searches to catch profile-relevant data tagged elsewhere:
-          Run: uv run python skills/search_index/search_index.py --workdir ${workdir} --query "customer concentration revenue top customer" --sections financial business_model --top-k 10
-          Run: uv run python skills/search_index/search_index.py --workdir ${workdir} --query "board director resignation appointment governance" --sections risk_news --top-k 5
+          Also run cross-section searches to catch profile-relevant data tagged elsewhere. Use question from step 0, e.g.:
+          Run: uv run python skills/search_index/search_index.py --workdir ${workdir} --query "customer concentration revenue top customer" --sections financial business_model --top-k 20
+          Run: uv run python skills/search_index/search_index.py --workdir ${workdir} --query "board director resignation appointment governance" --sections risk_news --top-k 20
 
-        2. Identify gaps in the existing material, then use MCP tools to fill them (company profile, executives, news, etc.).
+        4. **Identify gaps in the existing material, then use MCP tools to fill them (company profile, executives, news, etc.).**
 
-        3. Read relevant structured artifacts in artifacts/ (JSON, CSV files) for specific data points.
+        5. **Read relevant structured artifacts in artifacts/ (JSON, CSV files) for specific data points.**
 
-        4. **Evaluate information sufficiency.** Review your findings against the research brief.
+        6. **Evaluate information sufficiency.** Review your findings against the research brief.
           List any gaps — questions you cannot yet answer with evidence. For each gap:
           - Run additional search_index.py queries with different search terms
           - Try alternative MCP tool calls with different parameters
           Repeat until all brief questions are addressed or you've exhausted available
           sources (max 2 additional search rounds).
 
-        5. **Final checklist before saving.** Re-read your research brief (the "Ensure you have
+        7. **Final checklist before saving.** Re-read your research brief (the "Ensure you have
           all key facts" list above) item by item. For each item:
-          - Confirm you have at least one paragraph with a specific data point.
+          - Confirm you have at least one paragraph with relevant key facts.
           - If not, run one targeted search_index.py query for that item.
           - If still no data, note "[GAP: {item}] — no data found in index or MCP sources."
-          Verify that every ## heading in your output has at least one quantitative anchor.
-          Verify that no number lacks a source citation.
+          Verify that no fact lacks a source citation (or mark as "[UNVERIFIED]").
+          Verify that facts are consistent and resolve inconsistencies per the priorities in the research brief.
 
         ${research_output_instructions}
 
@@ -402,47 +366,46 @@ tasks:
         - Key moats and competitive advantages
         - Capital return strategies, M&A opportunities.
 
-        **Step 0: Decompose your research brief into specific questions.**
-        Before searching, break this topic into 5-10 specific questions you need to answer.
-        For each question, formulate 2-3 search queries using different terminology.
-        For example, "revenue breakdown" might also be searched as "segment performance",
-        "business unit revenue", "product line sales". This ensures comprehensive
-        retrieval from the index.
+        1. **Decompose your research brief into specific questions.**
+          Before searching, break this topic into 5-10 specific questions you need to answer.
+          For each question, formulate 2-3 search queries using different terminology
+          (synonyms, related concepts). For example, "revenue breakdown" might also be searched
+          as "segment performance", "business unit revenue", "product line sales".
+          This ensures comprehensive retrieval from the index.
 
-        **Step 0.5: Read authoritative baselines.**
-        Read artifacts/key_facts.json — this contains verified financial metrics extracted
-        from structured data. Use these numbers as ground truth. If you find a conflicting
-        number in the index or MCP results, note the discrepancy and prefer key_facts.json
-        for SEC-derived data, or MCP for current market data.
+        2. **Read authoritative baselines.**
+          Read artifacts/key_facts.json — this contains verified financial metrics extracted
+          from structured data. Use these numbers as ground truth. If you find a conflicting
+          number in the index or MCP results, note the discrepancy and prefer key_facts.json
+          for SEC-derived data, or MCP for current market data.
 
-        1. Retrieve everything already discovered for this section:
+        3. **Retrieve everything already discovered for this section:**
           Run: uv run python skills/search_index/search_index.py --all --workdir ${workdir} --sections business_model
           Read artifacts/manifest.json for a description of all available artifacts and review relevant artifacts.
           Review these results carefully — this is what we already have from SEC filings, Wikipedia, and other ingested sources.
 
-          Also run cross-section searches:
-          Run: uv run python skills/search_index/search_index.py --workdir ${workdir} --query "market share decline ASIC custom silicon displacement" --sections competitive --top-k 10
-          Run: uv run python skills/search_index/search_index.py --workdir ${workdir} --query "working capital DSO DIO DPO cash conversion" --sections financial --top-k 5
+          Also run cross-section searches to catch business-model-relevant data tagged elsewhere. Use questions from step 1, e.g.:
+          Run: uv run python skills/search_index/search_index.py --workdir ${workdir} --query "market share competitive position product displacement" --sections competitive --top-k 20
+          Run: uv run python skills/search_index/search_index.py --workdir ${workdir} --query "working capital DSO DIO DPO cash conversion" --sections financial --top-k 20
 
-        2. Identify gaps in the existing material, then use MCP tools to research revenue breakdown, segment trends, and moat sources.
-          Use searches like "{COMPANY} new product launch {CURRENT_YEAR}" to ensure knowledge is complete.
+        4. **Identify gaps in the existing material, then use MCP tools to fill them (revenue breakdown, segment trends, moat sources, etc.).**
 
-        3. Read relevant structured artifacts in artifacts/ (JSON, CSV files) for specific data points.
+        5. **Read relevant structured artifacts in artifacts/ (JSON, CSV files) for specific data points.**
 
-        4. **Evaluate information sufficiency.** Review your findings against the research brief.
+        6. **Evaluate information sufficiency.** Review your findings against the research brief.
           List any gaps — questions you cannot yet answer with evidence. For each gap:
           - Run additional search_index.py queries with different search terms
           - Try alternative MCP tool calls with different parameters
           Repeat until all brief questions are addressed or you've exhausted available
           sources (max 2 additional search rounds).
 
-        5. **Final checklist before saving.** Re-read your research brief (the "Ensure you have
+        7. **Final checklist before saving.** Re-read your research brief (the "Ensure you have
           all key facts" list above) item by item. For each item:
-          - Confirm you have at least one paragraph with a specific data point.
+          - Confirm you have at least one paragraph with relevant key facts.
           - If not, run one targeted search_index.py query for that item.
           - If still no data, note "[GAP: {item}] — no data found in index or MCP sources."
-          Verify that every ## heading in your output has at least one quantitative anchor.
-          Verify that no number lacks a source citation.
+          Verify that no fact lacks a source citation (or mark as "[UNVERIFIED]").
+          Verify that facts are consistent and resolve inconsistencies per the priorities in the research brief.
 
         ${research_output_instructions}
 
@@ -488,46 +451,46 @@ tasks:
           - Areas of profit, investment and focus across peers
 
 
-        **Step 0: Decompose your research brief into specific questions.**
-        Before searching, break this topic into 5-10 specific questions you need to answer.
-        For each question, formulate 2-3 search queries using different terminology.
-        For example, "market share" might also be searched as "competitive position",
-        "industry ranking", "revenue comparison peers". This ensures comprehensive
-        retrieval from the index.
+        1. **Decompose your research brief into specific questions.**
+          Before searching, break this topic into 5-10 specific questions you need to answer.
+          For each question, formulate 2-3 search queries using different terminology
+          (synonyms, related concepts). For example, "market share" might also be searched
+          as "competitive position", "industry ranking", "revenue comparison peers".
+          This ensures comprehensive retrieval from the index.
 
-        **Step 0.5: Read authoritative baselines.**
-        Read artifacts/key_facts.json — this contains verified financial metrics extracted
-        from structured data. Use these numbers as ground truth. If you find a conflicting
-        number in the index or MCP results, note the discrepancy and prefer key_facts.json
-        for SEC-derived data, or MCP for current market data.
+        2. **Read authoritative baselines.**
+          Read artifacts/key_facts.json — this contains verified financial metrics extracted
+          from structured data. Use these numbers as ground truth. If you find a conflicting
+          number in the index or MCP results, note the discrepancy and prefer key_facts.json
+          for SEC-derived data, or MCP for current market data.
 
-        1. Retrieve everything already discovered for this section:
+        3. **Retrieve everything already discovered for this section:**
           Run: uv run python skills/search_index/search_index.py --all --workdir ${workdir} --sections competitive
           Read artifacts/manifest.json for a description of all available artifacts and review relevant artifacts.
           Review these results carefully — this is what we already have from SEC filings, Wikipedia, and other ingested sources.
 
-          Also run cross-section searches:
-          Run: uv run python skills/search_index/search_index.py --workdir ${workdir} --query "TSMC supply chain foundry packaging CoWoS" --sections supply_chain --top-k 10
-          Run: uv run python skills/search_index/search_index.py --workdir ${workdir} --query "segment revenue market share growth rate" --sections business_model --top-k 10
+          Also run cross-section searches to catch competitive-relevant data tagged elsewhere. Use questions from step 1, e.g.:
+          Run: uv run python skills/search_index/search_index.py --workdir ${workdir} --query "supply chain manufacturing partner foundry capacity" --sections supply_chain --top-k 20
+          Run: uv run python skills/search_index/search_index.py --workdir ${workdir} --query "segment revenue market share growth rate" --sections business_model --top-k 20
 
-        2. Identify gaps in the existing material, then use MCP tools to research competitors, peer financials, and market dynamics.
+        4. **Identify gaps in the existing material, then use MCP tools to fill them (competitors, peer financials, market dynamics, etc.).**
 
-        3. Read relevant structured artifacts in artifacts/ (JSON, CSV files) for specific data points.
+        5. **Read relevant structured artifacts in artifacts/ (JSON, CSV files) for specific data points.**
 
-        4. **Evaluate information sufficiency.** Review your findings against the research brief.
+        6. **Evaluate information sufficiency.** Review your findings against the research brief.
           List any gaps — questions you cannot yet answer with evidence. For each gap:
           - Run additional search_index.py queries with different search terms
           - Try alternative MCP tool calls with different parameters
           Repeat until all brief questions are addressed or you've exhausted available
           sources (max 2 additional search rounds).
 
-        5. **Final checklist before saving.** Re-read your research brief (the "Ensure you have
+        7. **Final checklist before saving.** Re-read your research brief (the "Ensure you have
           all key facts" list above) item by item. For each item:
-          - Confirm you have at least one paragraph with a specific data point.
+          - Confirm you have at least one paragraph with relevant key facts.
           - If not, run one targeted search_index.py query for that item.
           - If still no data, note "[GAP: {item}] — no data found in index or MCP sources."
-          Verify that every ## heading in your output has at least one quantitative anchor.
-          Verify that no number lacks a source citation.
+          Verify that no fact lacks a source citation (or mark as "[UNVERIFIED]").
+          Verify that facts are consistent and resolve inconsistencies per the priorities in the research brief.
 
         ${research_output_instructions}
 
@@ -569,46 +532,46 @@ tasks:
         - Vertical integration vs. outsourcing decisions
         - Downstream distribution channels and customer dependencies
 
-        **Step 0: Decompose your research brief into specific questions.**
-        Before searching, break this topic into 5-10 specific questions you need to answer.
-        For each question, formulate 2-3 search queries using different terminology.
-        For example, "supplier concentration" might also be searched as "vendor dependency",
-        "single source risk", "procurement partners". This ensures comprehensive
-        retrieval from the index.
+        1. **Decompose your research brief into specific questions.**
+          Before searching, break this topic into 5-10 specific questions you need to answer.
+          For each question, formulate 2-3 search queries using different terminology
+          (synonyms, related concepts). For example, "supplier concentration" might also be searched
+          as "vendor dependency", "single source risk", "procurement partners".
+          This ensures comprehensive retrieval from the index.
 
-        **Step 0.5: Read authoritative baselines.**
-        Read artifacts/key_facts.json — this contains verified financial metrics extracted
-        from structured data. Use these numbers as ground truth. If you find a conflicting
-        number in the index or MCP results, note the discrepancy and prefer key_facts.json
-        for SEC-derived data, or MCP for current market data.
+        2. **Read authoritative baselines.**
+          Read artifacts/key_facts.json — this contains verified financial metrics extracted
+          from structured data. Use these numbers as ground truth. If you find a conflicting
+          number in the index or MCP results, note the discrepancy and prefer key_facts.json
+          for SEC-derived data, or MCP for current market data.
 
-        1. Retrieve everything already discovered for this section:
+        3. **Retrieve everything already discovered for this section:**
           Run: uv run python skills/search_index/search_index.py --all --workdir ${workdir} --sections supply_chain
           Read artifacts/manifest.json for a description of all available artifacts and review relevant artifacts.
           Review these results carefully — this is what we already have from SEC filings, Wikipedia, and other ingested sources.
 
-          Also run cross-section searches:
-          Run: uv run python skills/search_index/search_index.py --workdir ${workdir} --query "purchase commitments inventory provisions supply obligations" --sections financial risk_news --top-k 10
-          Run: uv run python skills/search_index/search_index.py --workdir ${workdir} --query "export control tariff geopolitical" --sections risk_news --top-k 10
+          Also run cross-section searches to catch supply-chain-relevant data tagged elsewhere. Use questions from step 1, e.g.:
+          Run: uv run python skills/search_index/search_index.py --workdir ${workdir} --query "purchase commitments inventory provisions supply obligations" --sections financial risk_news --top-k 20
+          Run: uv run python skills/search_index/search_index.py --workdir ${workdir} --query "export control tariff geopolitical trade restriction" --sections risk_news --top-k 20
 
-        2. Identify gaps in the existing material, then use MCP tools to research key suppliers, concentration risk, and geographic exposure.
+        4. **Identify gaps in the existing material, then use MCP tools to fill them (key suppliers, concentration risk, geographic exposure, etc.).**
 
-        3. Read relevant structured artifacts in artifacts/ (JSON, CSV files) for specific data points.
+        5. **Read relevant structured artifacts in artifacts/ (JSON, CSV files) for specific data points.**
 
-        4. **Evaluate information sufficiency.** Review your findings against the research brief.
+        6. **Evaluate information sufficiency.** Review your findings against the research brief.
           List any gaps — questions you cannot yet answer with evidence. For each gap:
           - Run additional search_index.py queries with different search terms
           - Try alternative MCP tool calls with different parameters
           Repeat until all brief questions are addressed or you've exhausted available
           sources (max 2 additional search rounds).
 
-        5. **Final checklist before saving.** Re-read your research brief (the "Ensure you have
+        7. **Final checklist before saving.** Re-read your research brief (the "Ensure you have
           all key facts" list above) item by item. For each item:
-          - Confirm you have at least one paragraph with a specific data point.
+          - Confirm you have at least one paragraph with relevant key facts.
           - If not, run one targeted search_index.py query for that item.
           - If still no data, note "[GAP: {item}] — no data found in index or MCP sources."
-          Verify that every ## heading in your output has at least one quantitative anchor.
-          Verify that no number lacks a source citation.
+          Verify that no fact lacks a source citation (or mark as "[UNVERIFIED]").
+          Verify that facts are consistent and resolve inconsistencies per the priorities in the research brief.
 
         ${research_output_instructions}
 
@@ -650,46 +613,46 @@ tasks:
         - TTM and forward estimates vs. historical performance
         - Segment-level financial performance where available
 
-        **Step 0: Decompose your research brief into specific questions.**
-        Before searching, break this topic into 5-10 specific questions you need to answer.
-        For each question, formulate 2-3 search queries using different terminology.
-        For example, "cash flow generation" might also be searched as "free cash flow",
-        "operating cash flow conversion", "capital expenditure vs depreciation".
-        This ensures comprehensive retrieval from the index.
+        1. **Decompose your research brief into specific questions.**
+          Before searching, break this topic into 5-10 specific questions you need to answer.
+          For each question, formulate 2-3 search queries using different terminology
+          (synonyms, related concepts). For example, "cash flow generation" might also be searched
+          as "free cash flow", "operating cash flow conversion", "capital expenditure vs depreciation".
+          This ensures comprehensive retrieval from the index.
 
-        **Step 0.5: Read authoritative baselines.**
-        Read artifacts/key_facts.json — this contains verified financial metrics extracted
-        from structured data. Use these numbers as ground truth. If you find a conflicting
-        number in the index or MCP results, note the discrepancy and prefer key_facts.json
-        for SEC-derived data, or MCP for current market data.
+        2. **Read authoritative baselines.**
+          Read artifacts/key_facts.json — this contains verified financial metrics extracted
+          from structured data. Use these numbers as ground truth. If you find a conflicting
+          number in the index or MCP results, note the discrepancy and prefer key_facts.json
+          for SEC-derived data, or MCP for current market data.
 
-        1. Retrieve everything already discovered for this section:
+        3. **Retrieve everything already discovered for this section:**
           Run: uv run python skills/search_index/search_index.py --all --workdir ${workdir} --sections financial
           Read artifacts/manifest.json for a description of all available artifacts and review relevant artifacts.
           Review these results carefully — this is what we already have from SEC filings, financial data, and other ingested sources.
 
-          Also run cross-section searches:
-          Run: uv run python skills/search_index/search_index.py --workdir ${workdir} --query "acquisition purchase business M&A deal" --sections profile risk_news --top-k 10
-          Run: uv run python skills/search_index/search_index.py --workdir ${workdir} --query "gross margin operating margin trend pressure" --sections business_model competitive --top-k 10
+          Also run cross-section searches to catch financial-relevant data tagged elsewhere. Use questions from step 1, e.g.:
+          Run: uv run python skills/search_index/search_index.py --workdir ${workdir} --query "acquisition purchase business M&A deal" --sections profile risk_news --top-k 20
+          Run: uv run python skills/search_index/search_index.py --workdir ${workdir} --query "gross margin operating margin trend pressure" --sections business_model competitive --top-k 20
 
-        2. Identify gaps in the existing material, then use MCP tools to research financial statements, TTM metrics, and trend analysis.
+        4. **Identify gaps in the existing material, then use MCP tools to fill them (financial statements, TTM metrics, trend analysis, etc.).**
 
-        3. Read relevant structured artifacts in artifacts/ (JSON, CSV files) for specific data points.
+        5. **Read relevant structured artifacts in artifacts/ (JSON, CSV files) for specific data points.**
 
-        4. **Evaluate information sufficiency.** Review your findings against the research brief.
+        6. **Evaluate information sufficiency.** Review your findings against the research brief.
           List any gaps — questions you cannot yet answer with evidence. For each gap:
           - Run additional search_index.py queries with different search terms
           - Try alternative MCP tool calls with different parameters
           Repeat until all brief questions are addressed or you've exhausted available
           sources (max 2 additional search rounds).
 
-        5. **Final checklist before saving.** Re-read your research brief (the "Ensure you have
+        7. **Final checklist before saving.** Re-read your research brief (the "Ensure you have
           all key facts" list above) item by item. For each item:
-          - Confirm you have at least one paragraph with a specific data point.
+          - Confirm you have at least one paragraph with relevant key facts.
           - If not, run one targeted search_index.py query for that item.
           - If still no data, note "[GAP: {item}] — no data found in index or MCP sources."
-          Verify that every ## heading in your output has at least one quantitative anchor.
-          Verify that no number lacks a source citation.
+          Verify that no fact lacks a source citation (or mark as "[UNVERIFIED]").
+          Verify that facts are consistent and resolve inconsistencies per the priorities in the research brief.
 
         ${research_output_instructions}
 
@@ -732,46 +695,46 @@ tasks:
         - Premium/discount drivers vs. peers (growth, quality, risk profile)
         - Recent valuation shifts and catalysts driving re-rating
 
-        **Step 0: Decompose your research brief into specific questions.**
-        Before searching, break this topic into 5-10 specific questions you need to answer.
-        For each question, formulate 2-3 search queries using different terminology.
-        For example, "analyst price targets" might also be searched as "consensus estimate",
-        "Wall Street rating", "buy sell recommendation". This ensures comprehensive
-        retrieval from the index.
+        1. **Decompose your research brief into specific questions.**
+          Before searching, break this topic into 5-10 specific questions you need to answer.
+          For each question, formulate 2-3 search queries using different terminology
+          (synonyms, related concepts). For example, "analyst price targets" might also be searched
+          as "consensus estimate", "Wall Street rating", "buy sell recommendation".
+          This ensures comprehensive retrieval from the index.
 
-        **Step 0.5: Read authoritative baselines.**
-        Read artifacts/key_facts.json — this contains verified financial metrics extracted
-        from structured data. Use these numbers as ground truth. If you find a conflicting
-        number in the index or MCP results, note the discrepancy and prefer key_facts.json
-        for SEC-derived data, or MCP for current market data.
+        2. **Read authoritative baselines.**
+          Read artifacts/key_facts.json — this contains verified financial metrics extracted
+          from structured data. Use these numbers as ground truth. If you find a conflicting
+          number in the index or MCP results, note the discrepancy and prefer key_facts.json
+          for SEC-derived data, or MCP for current market data.
 
-        1. Retrieve everything already discovered for this section:
+        3. **Retrieve everything already discovered for this section:**
           Run: uv run python skills/search_index/search_index.py --all --workdir ${workdir} --sections valuation
           Read artifacts/manifest.json for a description of all available artifacts and review relevant artifacts.
           Review these results carefully — this is what we already have from financial data, analyst estimates, and other ingested sources.
 
-          Also run cross-section searches:
-          Run: uv run python skills/search_index/search_index.py --workdir ${workdir} --query "buyback repurchase share count dilution" --sections financial --top-k 10
-          Run: uv run python skills/search_index/search_index.py --workdir ${workdir} --query "growth driver catalyst forward guidance" --sections business_model risk_news --top-k 10
+          Also run cross-section searches to catch valuation-relevant data tagged elsewhere. Use questions from step 1, e.g.:
+          Run: uv run python skills/search_index/search_index.py --workdir ${workdir} --query "buyback repurchase share count dilution" --sections financial --top-k 20
+          Run: uv run python skills/search_index/search_index.py --workdir ${workdir} --query "growth driver catalyst forward guidance" --sections business_model risk_news --top-k 20
 
-        2. Identify gaps in the existing material, then use MCP tools to research current multiples, analyst consensus, and peer comparisons.
+        4. **Identify gaps in the existing material, then use MCP tools to fill them (current multiples, analyst consensus, peer comparisons, etc.).**
 
-        3. Read relevant structured artifacts in artifacts/ (JSON, CSV files) for specific data points.
+        5. **Read relevant structured artifacts in artifacts/ (JSON, CSV files) for specific data points.**
 
-        4. **Evaluate information sufficiency.** Review your findings against the research brief.
+        6. **Evaluate information sufficiency.** Review your findings against the research brief.
           List any gaps — questions you cannot yet answer with evidence. For each gap:
           - Run additional search_index.py queries with different search terms
           - Try alternative MCP tool calls with different parameters
           Repeat until all brief questions are addressed or you've exhausted available
           sources (max 2 additional search rounds).
 
-        5. **Final checklist before saving.** Re-read your research brief (the "Ensure you have
+        7. **Final checklist before saving.** Re-read your research brief (the "Ensure you have
           all key facts" list above) item by item. For each item:
-          - Confirm you have at least one paragraph with a specific data point.
+          - Confirm you have at least one paragraph with relevant key facts.
           - If not, run one targeted search_index.py query for that item.
           - If still no data, note "[GAP: {item}] — no data found in index or MCP sources."
-          Verify that every ## heading in your output has at least one quantitative anchor.
-          Verify that no number lacks a source citation.
+          Verify that no fact lacks a source citation (or mark as "[UNVERIFIED]").
+          Verify that facts are consistent and resolve inconsistencies per the priorities in the research brief.
 
         ${research_output_instructions}
 
@@ -814,46 +777,46 @@ tasks:
         - Upcoming catalysts (earnings dates, product launches, regulatory decisions, contract renewals)
         - Recent analyst rating changes and sentiment shifts
 
-        **Step 0: Decompose your research brief into specific questions.**
-        Before searching, break this topic into 5-10 specific questions you need to answer.
-        For each question, formulate 2-3 search queries using different terminology.
-        For example, "regulatory risk" might also be searched as "compliance issue",
-        "government investigation", "SEC enforcement", "legal proceedings".
-        This ensures comprehensive retrieval from the index.
+        1. **Decompose your research brief into specific questions.**
+          Before searching, break this topic into 5-10 specific questions you need to answer.
+          For each question, formulate 2-3 search queries using different terminology
+          (synonyms, related concepts). For example, "regulatory risk" might also be searched
+          as "compliance issue", "government investigation", "SEC enforcement", "legal proceedings".
+          This ensures comprehensive retrieval from the index.
 
-        **Step 0.5: Read authoritative baselines.**
-        Read artifacts/key_facts.json — this contains verified financial metrics extracted
-        from structured data. Use these numbers as ground truth. If you find a conflicting
-        number in the index or MCP results, note the discrepancy and prefer key_facts.json
-        for SEC-derived data, or MCP for current market data.
+        2. **Read authoritative baselines.**
+          Read artifacts/key_facts.json — this contains verified financial metrics extracted
+          from structured data. Use these numbers as ground truth. If you find a conflicting
+          number in the index or MCP results, note the discrepancy and prefer key_facts.json
+          for SEC-derived data, or MCP for current market data.
 
-        1. Retrieve everything already discovered for this section:
+        3. **Retrieve everything already discovered for this section:**
           Run: uv run python skills/search_index/search_index.py --all --workdir ${workdir} --sections risk_news
           Read artifacts/manifest.json for a description of all available artifacts and review relevant artifacts.
           Review these results carefully — this is what we already have from SEC filings, news, and other ingested sources.
 
-          Also run cross-section searches:
-          Run: uv run python skills/search_index/search_index.py --workdir ${workdir} --query "HBM memory CoWoS packaging capacity supplier" --sections supply_chain --top-k 10
-          Run: uv run python skills/search_index/search_index.py --workdir ${workdir} --query "EU regulation AI act compliance gaming export" --sections competitive business_model --top-k 10
+          Also run cross-section searches to catch risk-relevant data tagged elsewhere. Use questions from step 1, e.g.:
+          Run: uv run python skills/search_index/search_index.py --workdir ${workdir} --query "supply constraint capacity bottleneck dependency" --sections supply_chain --top-k 20
+          Run: uv run python skills/search_index/search_index.py --workdir ${workdir} --query "regulation compliance export control trade restriction" --sections competitive business_model --top-k 20
 
-        2. Identify gaps in the existing material, then use MCP tools to research recent material events, risk factors, and regulatory filings.
+        4. **Identify gaps in the existing material, then use MCP tools to fill them (recent material events, risk factors, regulatory filings, etc.).**
 
-        3. Read relevant structured artifacts in artifacts/ (JSON, CSV files) for specific data points.
+        5. **Read relevant structured artifacts in artifacts/ (JSON, CSV files) for specific data points.**
 
-        4. **Evaluate information sufficiency.** Review your findings against the research brief.
+        6. **Evaluate information sufficiency.** Review your findings against the research brief.
           List any gaps — questions you cannot yet answer with evidence. For each gap:
           - Run additional search_index.py queries with different search terms
           - Try alternative MCP tool calls with different parameters
           Repeat until all brief questions are addressed or you've exhausted available
           sources (max 2 additional search rounds).
 
-        5. **Final checklist before saving.** Re-read your research brief (the "Ensure you have
+        7. **Final checklist before saving.** Re-read your research brief (the "Ensure you have
           all key facts" list above) item by item. For each item:
-          - Confirm you have at least one paragraph with a specific data point.
+          - Confirm you have at least one paragraph with relevant key facts.
           - If not, run one targeted search_index.py query for that item.
           - If still no data, note "[GAP: {item}] — no data found in index or MCP sources."
-          Verify that every ## heading in your output has at least one quantitative anchor.
-          Verify that no number lacks a source citation.
+          Verify that no fact lacks a source citation (or mark as "[UNVERIFIED]").
+          Verify that facts are consistent and resolve inconsistencies per the priorities in the research brief.
 
         ${research_output_instructions}
 
@@ -956,6 +919,9 @@ tasks:
         - artifacts/technical_analysis.json
         - artifacts/8k_summary.json
       prompt: |
+        {% if SHORT %}LENGTH GUIDANCE: Aim for 500-800 words. Be concise — key points only, minimal narrative.{% endif %}
+        {% if LONG %}LENGTH GUIDANCE: Aim for 1000-1500 words. Provide comprehensive detail, rich narrative, and thorough analysis.{% endif %}
+
         Your task is to use the gathered source material to write an extended narrative
         company profile, including founding story, company history with key milestones
         and a business overview with recent developments.
@@ -965,49 +931,51 @@ tasks:
           Read artifacts/manifest.json for a description of all available artifacts and review relevant artifacts.
           Read the inline artifacts below.
 
-        These are all chunks relevant to this section — data artifacts, research findings, and MCP responses.
-        Use these results as your primary source alongside the inline structured data above.
-        Use Read and Grep tools to access larger artifact files not included inline.
-        Do not call other external tools or APIs — focus on synthesis from provided data.
-        Do not attempt external research — synthesize from the provided data only.
+          These are all chunks relevant to this section — data artifacts, research findings, and MCP responses.
+          Use these results as your primary source alongside the inline structured data above.
+          Use Read and Grep tools to access larger artifact files not included inline.
+          Do not call other external tools or APIs — focus on synthesis from provided data.
+          Do not attempt external research — synthesize from the provided data only.
 
-        **Source triangulation**: When citing numbers or key claims:
-        - If confirmed by 2+ independent sources (e.g., SEC filing AND analyst report): state with confidence
-        - If from a single source only: qualify with source attribution (e.g., "per the 10-K filing...")
-        - If sources conflict: acknowledge the discrepancy and explain which you weight more heavily,
-          per the Source Reliability Hierarchy in STYLE.md
 
-        Structure the profile as follows:
-        1 paragraph executive summary covering: what the company does, its scale (revenue, market cap,
-        employees, geographic footprint), and what makes it an interesting from an investment perspective.
+        2. Write the profile.
+          **Source triangulation**: When citing numbers or key claims:
+          - If confirmed by 2+ independent sources (e.g., SEC filing AND analyst report): state with confidence
+          - If from a single source only: qualify with source attribution (e.g., "per the 10-K filing...")
+          - If sources conflict: acknowledge the discrepancy and explain which you weight more heavily,
+            per the Source Reliability Hierarchy in STYLE.md
 
-        ## History and Key Milestones
-        1-3 paragraph narrative origin story: founding circumstances, founders, early vision. Then walk through the
-        critical inflection points — pivots, product launches, IPO, major acquisitions, near-death
-        experiences, and transformative moments — that explain how the company became what it is
-        today. Emphasize events that shaped the current competitive position or business model.
-        Include approximate dates.
+          Structure as follows:
+          1 paragraph executive summary covering: what the company does, its scale (revenue, market cap,
+          employees, geographic footprint), and what makes it an interesting from an investment perspective.
 
-        ## Core Business and Investment Highlights
-          Cover in 1-3 paragraphs:
-          - Revenue segments with approximate size and growth trajectory
-          - Primary products/services and what differentiates them
-          - Business model (how the company actually makes money)
-          - Sources of competitive advantage (network effects, switching costs, IP, scale, distribution)
-          - Key metrics investors track (unit economics, margins, retention, utilization, etc.)
-          - The central tension or debate in the investment case (e.g., "priced as X, may become Y")
+          ## History and Key Milestones
+          1-3 paragraph narrative origin story: founding circumstances, founders, early vision. Then walk through the
+          critical inflection points — pivots, product launches, IPO, major acquisitions, near-death
+          experiences, and transformative moments — that explain how the company became what it is
+          today. Emphasize events that shaped the current competitive position or business model.
+          Include approximate dates.
 
-        ## Recent Developments
-          Cover in 1 paragraph the most significant developments from the past 12 months that materially
-          affect the investment case, such as: financial results, product launches, competitive moves,
-          regulatory events, management changes, and any macro/policy tailwinds or headwinds.
-          Be specific — include figures, dates, and context for why each development matters.
-          Use a straightforward, factual tone throughout the analysis. Focus on data and observable facts rather than speculation.
+          ## Core Business and Investment Highlights
+            Cover in 1-3 paragraphs:
+            - Revenue segments with approximate size and growth trajectory
+            - Primary products/services and what differentiates them
+            - Business model (how the company actually makes money)
+            - Sources of competitive advantage (network effects, switching costs, IP, scale, distribution)
+            - Key metrics investors track (unit economics, margins, retention, utilization, etc.)
+            - The central tension or debate in the investment case (e.g., "priced as X, may become Y")
 
-        Begin the section with a top-level heading in this exact format: ## 1. Company Profile
-        Use ## for subsection headings within.
+          ## Recent Developments
+            Cover in 1 paragraph the most significant developments from the past 12 months that materially
+            affect the investment case, such as: financial results, product launches, competitive moves,
+            regulatory events, management changes, and any macro/policy tailwinds or headwinds.
+            Be specific — include figures, dates, and context for why each development matters.
+            Use a straightforward, factual tone throughout the analysis. Focus on data and observable facts rather than speculation.
 
-        Save results in markdown format to drafts/section_1_profile.md
+          Begin the section with a top-level heading in this exact format: ## 1. Company Profile
+          Use ## for subsection headings within.
+
+          Save results in markdown format to drafts/section_1_profile.md
 
         ${artifact_context_inline}
 
@@ -1120,6 +1088,8 @@ tasks:
         - If sources conflict: acknowledge the discrepancy and explain which you weight more heavily,
           per the Source Reliability Hierarchy in STYLE.md
 
+        {% if SHORT %}LENGTH GUIDANCE: Aim for 200-400 words. Be concise — key points only, minimal narrative.{% endif %}
+        {% if LONG %}LENGTH GUIDANCE: Aim for 1500-2500 words. Provide comprehensive detail, rich narrative, and thorough analysis.{% endif %}
         Write Section 2 of an equity research report on ${ticker}: Business Model.
 
         Cover:
@@ -1266,6 +1236,8 @@ tasks:
         - If sources conflict: acknowledge the discrepancy and explain which you weight more heavily,
           per the Source Reliability Hierarchy in STYLE.md
 
+        {% if SHORT %}LENGTH GUIDANCE: Aim for 200-400 words. Be concise — key points only, minimal narrative.{% endif %}
+        {% if LONG %}LENGTH GUIDANCE: Aim for 1500-2500 words. Provide comprehensive detail, rich narrative, and thorough analysis.{% endif %}
         Write Section 3 of an equity research report on ${ticker}: Competitive Landscape.
 
         Cover:
@@ -1387,6 +1359,8 @@ tasks:
         - If sources conflict: acknowledge the discrepancy and explain which you weight more heavily,
           per the Source Reliability Hierarchy in STYLE.md
 
+        {% if SHORT %}LENGTH GUIDANCE: Aim for 200-400 words. Be concise — key points only, minimal narrative.{% endif %}
+        {% if LONG %}LENGTH GUIDANCE: Aim for 1500-2500 words. Provide comprehensive detail, rich narrative, and thorough analysis.{% endif %}
         Write Section 4 of an equity research report on ${ticker}: Supply Chain Positioning.
 
         Cover:
@@ -1515,6 +1489,8 @@ tasks:
         - If sources conflict: acknowledge the discrepancy and explain which you weight more heavily,
           per the Source Reliability Hierarchy in STYLE.md
 
+        {% if SHORT %}LENGTH GUIDANCE: Aim for 200-400 words. Be concise — key points only, minimal narrative.{% endif %}
+        {% if LONG %}LENGTH GUIDANCE: Aim for 1500-2500 words. Provide comprehensive detail, rich narrative, and thorough analysis.{% endif %}
         Write Section 5 of an equity research report on ${ticker}: Financial Strength.
 
         Cover:
@@ -1637,6 +1613,8 @@ tasks:
         - If sources conflict: acknowledge the discrepancy and explain which you weight more heavily,
           per the Source Reliability Hierarchy in STYLE.md
 
+        {% if SHORT %}LENGTH GUIDANCE: Aim for 200-400 words. Be concise — key points only, minimal narrative.{% endif %}
+        {% if LONG %}LENGTH GUIDANCE: Aim for 1500-2500 words. Provide comprehensive detail, rich narrative, and thorough analysis.{% endif %}
         Write Section 6 of an equity research report on ${ticker}: Valuation.
 
         Cover:
@@ -1755,6 +1733,8 @@ tasks:
         - If sources conflict: acknowledge the discrepancy and explain which you weight more heavily,
           per the Source Reliability Hierarchy in STYLE.md
 
+        {% if SHORT %}LENGTH GUIDANCE: Aim for 200-400 words. Be concise — key points only, minimal narrative.{% endif %}
+        {% if LONG %}LENGTH GUIDANCE: Aim for 1500-2500 words. Provide comprehensive detail, rich narrative, and thorough analysis.{% endif %}
         Write Section 7 of an equity research report on ${ticker}: Risks.
 
         Use the comprehensive research data available. Key sources are in the LanceDB index (query via search_index.py above).
@@ -1931,6 +1911,8 @@ tasks:
       prompt: |
         ${artifact_context_inline}
 
+        {% if SHORT %}LENGTH GUIDANCE: Aim for 100-200 words. Be concise — key takeaway only.{% endif %}
+        {% if LONG %}LENGTH GUIDANCE: Aim for 500-800 words. Provide a thorough synthesis of all key themes.{% endif %}
         read the report body at artifacts/assembled_body.md carefully and write a concluding 1-3 short paragraphs < 500 words total.
             • Start with title header "## Conclusion: Investment Thesis"
             • Summarize the company's strategic position and the stock's investment risk/reward profile
