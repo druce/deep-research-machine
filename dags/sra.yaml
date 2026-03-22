@@ -1393,6 +1393,17 @@ tasks:
         • Note any recent supply chain disruptions, changes, or vertical integration decisions.
         • Identify downstream distribution channels and customer concentration risks.
 
+        CRITICAL — Investment-case framing: For every supply chain element you describe, explicitly
+        state the investment implication. Do not just describe the chain — analyze WHY it matters for
+        the stock. Examples:
+        - Don't just say "TSMC is a single-source supplier" → explain what this concentration means
+          for earnings risk, margin trajectory, or competitive durability
+        - Don't just list geographic exposures → quantify the revenue or margin at risk and assess
+          probability-weighted scenarios
+        - Don't just note inventory levels → contextualize vs. peers or history and explain what
+          the trend signals about demand visibility or margin risk
+        Every paragraph must answer "so what does this mean for the investment case?"
+
         Use a straightforward, factual tone throughout the analysis. Focus on data and observable facts rather than speculation.
 
         Begin the section with a top-level heading in this exact format: ## 4. Supply Chain Positioning
@@ -1401,8 +1412,8 @@ tasks:
         Save results in markdown format to drafts/section_4_supply_chain.md
       hard_checks:
         - "startswith: ## 4. Supply Chain Positioning"
-      hard_check_retries: 2
-      n_iterations: 1
+      hard_check_retries: 0
+      n_iterations: 0
       critic_prompt: |
         Read the draft section at ${draft_path} carefully and critique it for an equity research report.
 
