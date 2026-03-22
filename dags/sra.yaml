@@ -1376,6 +1376,9 @@ tasks:
         - If from a single source only: qualify with source attribution (e.g., "per the 10-K filing...")
         - If sources conflict: acknowledge the discrepancy and explain which you weight more heavily,
           per the Source Reliability Hierarchy in STYLE.md
+        - If a figure comes from analyst estimates or press reports rather than company filings:
+          explicitly flag it (e.g., "analyst estimates suggest..." or "per industry reports...").
+          Never present unverifiable estimates as established facts.
 
         {% if SHORT %}LENGTH GUIDANCE: Aim for 200-400 words. Be concise — key points only, minimal narrative.{% endif %}
         {% if LONG %}LENGTH GUIDANCE: Aim for 1500-2500 words. Provide comprehensive detail, rich narrative, and thorough analysis.{% endif %}
