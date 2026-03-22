@@ -1412,6 +1412,11 @@ tasks:
 
         Use a straightforward, factual tone throughout the analysis. Focus on data and observable facts rather than speculation.
 
+        **Style precision**: Use proper em-dashes (—), not double hyphens (--). Avoid formulaic
+        transitions ("For context", "It is worth noting", "Importantly"). Open paragraphs with
+        the subject or claim, not a meta-comment about what you are about to say. Every sentence
+        should assert something substantive — cut throat-clearing.
+
         Begin the section with a top-level heading in this exact format: ## 4. Supply Chain Positioning
         Use ## for subsection headings within.
 
