@@ -1545,6 +1545,7 @@ tasks:
         • Include ONE peer comparison table benchmarking ${ticker} against 3-5 peers on margins, returns on capital, and leverage ratios. Present peer data ONLY in this single table — do not repeat the same metrics in other subsections.
 
         Use a straightforward, factual tone throughout the analysis. Focus on data and observable facts rather than speculation.
+        For every key metric, explain what it means for the investment case — connect the number to a forward-looking implication for earnings power, risk, or valuation. Do not just present data; analyze it.
         IMPORTANT: Never present the same data point or metric in more than one subsection. Each number should appear exactly once.
         IMPORTANT: Do not use bullet-point lists anywhere in the section. Use prose paragraphs for all analysis. Data tables are encouraged.
 
