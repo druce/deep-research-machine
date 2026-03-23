@@ -1809,6 +1809,7 @@ tasks:
 
         Use a straightforward, factual tone throughout the analysis. Focus on data and observable facts rather than speculation.
         Do not use bullet-point lists in the output — use prose paragraphs and tables only.
+        Tone exemplar: "The $5.5 billion H20 charge quantifies the financial cost of export control whiplash, but the strategic damage — permanent cession of a $30 billion market to Huawei — is harder to measure and almost certainly underpriced." Aim for this level of analytical specificity throughout: fact, then implication, then market-pricing judgment.
 
         Begin the section with a top-level heading in this exact format: ## 7. Risks
         Use ### for subsection headings within.
