@@ -1812,6 +1812,7 @@ tasks:
 
         Begin the section with a top-level heading in this exact format: ## 7. Risks
         Use ### for subsection headings within.
+        After the heading, open with a direct analytical claim about the company's risk exposure — never with a self-referential statement like "This section covers..." or "What follows prioritizes...".
 
         Save results in markdown format to drafts/section_7_risk_news.md
       hard_checks:
