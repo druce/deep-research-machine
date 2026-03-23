@@ -1,2 +1,7 @@
 commit	total	completeness	length	insight	relevance	style	status	description
-58fad92	8.53	8.0	10.0	8.33	8.33	8.0	baseline	aligned prompt to rubric: ### headings, 2000-2800 length, risk prioritization, probability/magnitude, no-bullets; completeness/style bottleneck from missing analyst rating changes and institutional ownership shifts
+58fad92	8.53	8.0	10.0	8.33	8.33	8.0	baseline	aligned prompt to rubric
+4287ed0	9.0	9.0	10.0	9.0	9.0	8.0	keep	require analyst rating changes and institutional ownership shifts
+73b44fa	9.07	9.0	10.0	9.0	8.33	9.0	keep	prohibit self-referential opening; style +1.0
+3ca0d8b	9.07	9.0	10.0	9.0	9.0	8.33	keep	tone exemplar (fact→implication→pricing); relevance +0.67
+a374ba5	9.13	9.0	10.0	9.0	8.67	9.0	keep	remove 'straightforward factual' tone; style +0.67; NEW HIGH
+2e415aa	8.93	8.67	10.0	9.0	9.0	8.0	discard	merge Taiwan geopolitical into TSMC; completeness/style regressed: ### headings, 2000-2800 length, risk prioritization, probability/magnitude, no-bullets; completeness/style bottleneck from missing analyst rating changes and institutional ownership shifts

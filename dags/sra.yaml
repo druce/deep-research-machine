@@ -1,3 +1,12 @@
+# TODO: restructure prompts
+# 1. role
+# 2. structure and specific instructions
+# 3. tone and style - bring style.md inline , move all style rules there
+# 4. rules: source priority; citation rule; reconciliation rule
+# 5. final instructions
+# 6. inline data, make them appear in the logged prompt for easy review
+# additional charts and stuff from anthropic repo
+
 dag:
   version: 2
   name: Equity Research Report Bot
@@ -906,7 +915,7 @@ tasks:
     type: claude
     depends_on: [append_index]
     config:
-      max_budget_usd: 1.50
+      max_budget_usd: 2.00
       system: |
         You are a senior equity research analyst writing a professional report on ${company_name} (${symbol}).
         Read and follow the style guide at ../../STYLE.md.
@@ -922,10 +931,6 @@ tasks:
         - artifacts/technical_analysis.json
         - artifacts/8k_summary.json
       prompt: |
-        {% if SHORT %}LENGTH GUIDANCE: Aim for 500-800 words. Be concise — key points only, minimal narrative.{% endif %}
-        {% if LONG %}LENGTH GUIDANCE: Aim for 1000-1500 words. Provide comprehensive detail, rich narrative, and thorough analysis.{% endif %}
-        {% if not SHORT and not LONG %}LENGTH GUIDANCE: Target 800-1200 words. This is a hard constraint — do not exceed 1200 words. Prioritize density over coverage; cut any sentence that doesn't serve the investment case.{% endif %}
-
         Your task is to use the gathered source material to write an extended narrative
         company profile, including founding story, company history with key milestones
         and a business overview with recent developments.
@@ -992,8 +997,8 @@ tasks:
         # - "startswith: TEXT"
         # - "contains: TEXT"
         # - "regex: PATTERN"
-      hard_check_retries: 0
-      n_iterations: 0
+      hard_check_retries: 2
+      n_iterations: 1
       critic_prompt: |
         Read the draft section at ${draft_path} carefully and critique it for an equity research report.
 
@@ -1012,14 +1017,34 @@ tasks:
             - **Detail**: If CONTRADICTED, state what the source actually says.
               If UNSUPPORTED, suggest search queries that might find evidence.
 
+        ## Completeness check
+
+        Verify all required elements are present with specific data (not vague generalities):
+        - [ ] Executive summary (what company does, scale — revenue, market cap, employee count, why interesting)
+        - [ ] Founding story (specific date, named founders, early vision)
+        - [ ] History and key milestones (IPO date, major acquisitions with $ amounts, pivots, product launches with dates)
+        - [ ] Core business (revenue segments with approximate sizes and growth rates)
+        - [ ] Business model (how the company actually makes money)
+        - [ ] Competitive advantages (specific moat sources with evidence, not just "strong brand")
+        - [ ] Key investor metrics (specific numbers: margins, growth rates, returns on capital)
+        - [ ] Recent developments (last 12 months, with specific figures, dates, and why each matters)
+        Flag any element that is missing or shallow.
+
+        ## Length check
+
+        Count the words. Target: 800-1200 words. Flag if outside this range.
+
         ## Quality evaluation
 
-        Also evaluate for:
-        - Clarity and readability
-        - Missing or incomplete analysis — topics covered in the source material but absent from the draft
-        - Unsupported claims or speculation not grounded in sources
-        - Repetition
-        - Professional tone and formatting
+        Evaluate for:
+        - **Analytical framing**: Every key data point must be followed by its investment implication — the "so what." Flag paragraphs that only list facts without connecting them to the investment case.
+        - **Relevance**: Would a portfolio manager skip any paragraph? Flag filler, throat-clearing, or generic context that doesn't serve the investment case. Flag repetition (same point in different words).
+        - **Source grounding**: Are opinions distinguished from facts? Flag unsupported claims or speculation.
+        - **Missing analysis**: Are there significant topics in the source material absent from the draft?
+        - **Heading format**: Section MUST start with `## 1. Company Profile` as the first line.
+        - **First reference**: Must use full legal name + ticker in parens, e.g., "NVIDIA Corporation (NASDAQ: NVDA)".
+        - **Number formatting**: Stock prices to 2 decimals ($328.47), market cap in billions with 1 decimal ($24.3B), percentages to 1 decimal (23.4%), ratios to 1 decimal (18.3x). Large numbers in readable form ("$34.3 billion" not "$34,300,000,000"). Revenue labels fiscal year explicitly.
+        - **Style**: No LLM tells ("In conclusion", "Overall", "It's important to note", "comprehensive", "robust"). No hedging ("it should be noted", "it is worth mentioning"). No bullet-point lists where prose is expected. No passive voice or weasel words.
         - Compliance with the style guide at ../../STYLE.md
 
         Write a numbered list of specific issues, ordered by importance.
@@ -1059,7 +1084,7 @@ tasks:
     type: claude
     depends_on: [append_index]
     config:
-      max_budget_usd: 1.50
+      max_budget_usd: 2.00
       system: "You are a senior equity research analyst writing a professional report. Read and follow the style guide at ../../STYLE.md."
       disallowed_tools: [WebSearch, WebFetch, Agent, Skill, yfinance, alphavantage, brave-search, wikipedia, openbb-mcp, playwright, fetch, filesystem]
       artifacts_inline:
@@ -1097,9 +1122,6 @@ tasks:
         - If sources conflict: acknowledge the discrepancy and explain which you weight more heavily,
           per the Source Reliability Hierarchy in STYLE.md
 
-        {% if SHORT %}LENGTH GUIDANCE: Aim for 400-600 words. Be concise — key points only, minimal narrative.{% endif %}
-        {% if LONG %}LENGTH GUIDANCE: Aim for 2500-3500 words. Provide comprehensive detail, rich narrative, and thorough analysis.{% endif %}
-        {% if not SHORT and not LONG %}LENGTH GUIDANCE — HARD CONSTRAINT: The section MUST be 1200-1800 words. Outputs over 1800 words are unacceptable and will be rejected. Count your words before finalizing. Use the subsection word budgets below as your guide.{% endif %}
         Write Section 2 of an equity research report on ${ticker}: Business Model.
 
         Structure the section into EXACTLY these 5 subsections with word budgets:
@@ -1137,8 +1159,8 @@ tasks:
         Save results in markdown format to drafts/section_2_business_model.md
       hard_checks:
         - "startswith: ## 2. Business Model"
-      hard_check_retries: 0
-      n_iterations: 0
+      hard_check_retries: 2
+      n_iterations: 1
       critic_prompt: |
         Read the draft section at ${draft_path} carefully and critique it for an equity research report.
 
@@ -1157,14 +1179,43 @@ tasks:
             - **Detail**: If CONTRADICTED, state what the source actually says.
               If UNSUPPORTED, suggest search queries that might find evidence.
 
+        ## Completeness check
+
+        Verify all required elements are present with specific data:
+        - [ ] Core businesses, products and services
+        - [ ] Revenue streams with customer segments, relative importance, and monetization data
+        - [ ] Recent changes, product launches, discontinuations, pivots, management changes
+        - [ ] Monetization characteristics (model type, customer types, CAC/retention/switching costs, seasonality/cyclicality, margin structures by segment, TAM/SAM/share/growth)
+        - [ ] Competitive advantages (network effects, switching costs, scale, distribution, IP, regulatory moats — with evidence, not assertions)
+        - [ ] Growth drivers and capital allocation (organic vectors, capex, capital structure vs peers, capital return policy, M&A)
+        - [ ] Data tables showing revenue/margin/metric trends — prose-only is a deduction
+        Flag any element that is missing or shallow.
+
+        ## Structure check
+
+        Verify the section contains EXACTLY these 5 subsections with approximate word budgets:
+        1. Revenue Mix & Segments (~300 words)
+        2. Monetization & Margin Dynamics (~250 words)
+        3. Competitive Advantages (~300 words)
+        4. Growth Drivers & Capital Allocation (~250 words)
+        5. Risks to the Model (~100 words)
+        Flag missing subsections or severe word budget violations.
+
+        ## Length check
+
+        Count the words. Target: 1200-1800 words. This is a hard constraint — flag if outside this range.
+
         ## Quality evaluation
 
-        Also evaluate for:
-        - Clarity and readability
-        - Missing or incomplete analysis — topics covered in the source material but absent from the draft
-        - Unsupported claims or speculation not grounded in sources
-        - Repetition
-        - Professional tone and formatting
+        Evaluate for:
+        - **Analytical framing**: Does it explain *why* business model characteristics matter for the investment case? Flag paragraphs that only describe without analyzing dynamics (margin trade-offs, cannibalization risks, concentration risks, segment interdependencies).
+        - **Anti-repetition**: Flag any number or statistic that appears in more than one subsection. Each data point should appear once, in its most relevant subsection.
+        - **Relevance**: Would a portfolio manager skip any paragraph? Flag filler, throat-clearing, or generic context.
+        - **Source grounding**: Are competitive advantages evidenced with data (market share, switching cost quantification, scale metrics) rather than asserted? Are opinions distinguished from facts?
+        - **Missing analysis**: Topics in source material absent from the draft?
+        - **Heading format**: Section MUST start with `## 2. Business Model` as the first line.
+        - **Number formatting**: Stock prices to 2 decimals ($328.47), market cap in billions with 1 decimal ($24.3B), percentages to 1 decimal (23.4%), ratios to 1 decimal (18.3x). Large numbers in readable form. Revenue labels fiscal year explicitly.
+        - **Style**: No LLM tells ("In conclusion", "Overall", "It's important to note", "comprehensive", "robust"). No hedging. No bullet-point lists where prose is expected (tables are fine and encouraged). Data tables must be well-formatted with aligned columns and clear labels.
         - Compliance with the style guide at ../../STYLE.md
 
         Write a numbered list of specific issues, ordered by importance.
@@ -1204,7 +1255,7 @@ tasks:
     type: claude
     depends_on: [append_index]
     config:
-      max_budget_usd: 1.50
+      max_budget_usd: 2.00
       system: "You are a senior equity research analyst writing a professional report. Read and follow the style guide at ../../STYLE.md."
       disallowed_tools: [WebSearch, WebFetch, Agent, Skill, yfinance, alphavantage, brave-search, wikipedia, openbb-mcp, playwright, fetch, filesystem]
       artifacts_inline:
@@ -1240,9 +1291,6 @@ tasks:
         - If sources conflict: acknowledge the discrepancy and explain which you weight more heavily,
           per the Source Reliability Hierarchy in STYLE.md
 
-        {% if SHORT %}LENGTH GUIDANCE: Aim for 200-400 words. Be concise — key points only, minimal narrative.{% endif %}
-        {% if LONG %}LENGTH GUIDANCE: Aim for 1500-2500 words. Provide comprehensive detail, rich narrative, and thorough analysis.{% endif %}
-        {% if not SHORT and not LONG %}LENGTH GUIDANCE: Aim for 1200-1800 words. This is a hard constraint — do not exceed 1800 words. Prioritize density over breadth: cut any paragraph that doesn't directly serve the investment case. If content exceeds 1800 words, remove the least essential subsection entirely rather than trimming everywhere.{% endif %}
         Write Section 3 of an equity research report on ${ticker}: Competitive Landscape.
 
         Cover:
@@ -1275,8 +1323,8 @@ tasks:
         Save results in markdown format to drafts/section_3_competitive.md
       hard_checks:
         - "startswith: ## 3. Competitive Landscape"
-      hard_check_retries: 0
-      n_iterations: 0
+      hard_check_retries: 2
+      n_iterations: 1
       critic_prompt: |
         Read the draft section at ${draft_path} carefully and critique it for an equity research report.
 
@@ -1295,14 +1343,33 @@ tasks:
             - **Detail**: If CONTRADICTED, state what the source actually says.
               If UNSUPPORTED, suggest search queries that might find evidence.
 
+        ## Completeness check
+
+        Verify all required elements are present with specific data:
+        - [ ] Main competitors identified — direct, adjacent, and emerging — with their value propositions
+        - [ ] Per-competitor comparison: revenue scale, market share, product lineup differences, specific advantages/threats, vulnerabilities relative to subject company
+        - [ ] Competitive environment trends: where unit and dollar market share is being gained or lost, whether shifts are structural or cyclical, evidence of increasing/decreasing pricing power. Must quantify trajectory with current share estimates AND 12-18 month projections. Must distinguish share loss in growing TAM vs flat TAM.
+        - [ ] Emerging or potential disruptors and risk of disruption from adjacent markets
+        - [ ] Peer comparison table with key metrics (revenue, margins, growth, valuation multiples). Any implausible multiples must be flagged with a footnote — anomalous data without comment erodes credibility.
+        Flag any element that is missing or shallow.
+
+        ## Length check
+
+        Count the words. Target: 1200-1800 words. Hard constraint — flag if outside this range.
+
         ## Quality evaluation
 
-        Also evaluate for:
-        - Clarity and readability
-        - Missing or incomplete analysis — topics covered in the source material but absent from the draft
-        - Unsupported claims or speculation not grounded in sources
-        - Repetition
-        - Professional tone and formatting
+        Evaluate for:
+        - **Investment implication rule**: Every competitive observation must answer "so what for the stock?" Flag any competitive fact (share shift, new entrant, moat factor) without an analytical implication for revenue trajectory, margin sustainability, or multiple.
+        - **Varied phrasing**: Flag repeated formulaic transitions like "For the stock, this means..." — implications should be woven naturally into the analytical flow.
+        - **Dynamics analysis**: Does it analyze share shifts, pricing power trends, structural vs cyclical changes, competitive moat durability — not just list competitors?
+        - **Source grounding**: Are competitive advantages evidenced with data (market share numbers, margin comparisons, scale metrics) rather than asserted? Claims confirmed by 2+ sources should be stated with confidence; single-source claims qualified; conflicting sources acknowledged.
+        - **Relevance**: Would a PM skip any paragraph? Flag filler, generic industry context, or trivial competitors. Flag repetition (same competitive point in different words).
+        - **Missing analysis**: Significant competitive topics in source material absent from the draft?
+        - **Peer table sanity**: Check every number in the peer comparison table — flag implausible multiples for the company's scale and profitability.
+        - **Heading format**: Section MUST start with `## 3. Competitive Landscape` as the first line.
+        - **Number formatting**: Stock prices to 2 decimals, market cap in billions with 1 decimal, percentages to 1 decimal, ratios to 1 decimal. Large numbers in readable form. Revenue labels fiscal year.
+        - **Style**: No LLM tells, no hedging, no bullet-point lists (tables fine and encouraged). No passive voice or weasel words.
         - Compliance with the style guide at ../../STYLE.md
 
         Write a numbered list of specific issues, ordered by importance.
@@ -1342,7 +1409,7 @@ tasks:
     type: claude
     depends_on: [append_index]
     config:
-      max_budget_usd: 1.50
+      max_budget_usd: 2.00
       system: "You are a senior equity research analyst writing a professional report. Read and follow the style guide at ../../STYLE.md."
       disallowed_tools: [WebSearch, WebFetch, Agent, Skill, yfinance, alphavantage, brave-search, wikipedia, openbb-mcp, playwright, fetch, filesystem]
       artifacts_inline:
@@ -1380,8 +1447,6 @@ tasks:
           explicitly flag it (e.g., "analyst estimates suggest..." or "per industry reports...").
           Never present unverifiable estimates as established facts.
 
-        {% if SHORT %}LENGTH GUIDANCE: Aim for 200-400 words. Be concise — key points only, minimal narrative.{% endif %}
-        {% if LONG %}LENGTH GUIDANCE: Aim for 1500-2500 words. Provide comprehensive detail, rich narrative, and thorough analysis.{% endif %}
         Write Section 4 of an equity research report on ${ticker}: Supply Chain Positioning.
 
         Cover:
@@ -1426,8 +1491,8 @@ tasks:
         Save results in markdown format to drafts/section_4_supply_chain.md
       hard_checks:
         - "startswith: ## 4. Supply Chain Positioning"
-      hard_check_retries: 0
-      n_iterations: 0
+      hard_check_retries: 2
+      n_iterations: 1
       critic_prompt: |
         Read the draft section at ${draft_path} carefully and critique it for an equity research report.
 
@@ -1446,14 +1511,33 @@ tasks:
             - **Detail**: If CONTRADICTED, state what the source actually says.
               If UNSUPPORTED, suggest search queries that might find evidence.
 
+        ## Completeness check
+
+        Verify all required elements are present with specific data (named suppliers, revenue concentrations, geographic breakdowns):
+        - [ ] Company's role in the upstream (supplier-side) and downstream (customer/distribution) value chain
+        - [ ] Key suppliers, manufacturing partners, and input dependencies (raw materials, components)
+        - [ ] Supplier concentration risk — single-source or limited-source dependencies identified and quantified
+        - [ ] Geographic exposure of the supply chain: countries, regions, trade route risks, tariff and sanctions exposure
+        - [ ] Logistics and distribution infrastructure, inventory management approach, and working capital implications
+        - [ ] Recent supply chain disruptions, changes, or vertical integration decisions
+        - [ ] Downstream distribution channels and customer concentration risks
+        Flag any element that is missing or shallow.
+
+        ## Length check
+
+        Count the words. Target: 1300-2000 words. Flag if outside this range.
+
         ## Quality evaluation
 
-        Also evaluate for:
-        - Clarity and readability
-        - Missing or incomplete analysis — topics covered in the source material but absent from the draft
-        - Unsupported claims or speculation not grounded in sources
-        - Repetition
-        - Professional tone and formatting
+        Evaluate for:
+        - **Investment-case framing**: For EVERY supply chain element, is the investment implication explicitly stated? Flag any paragraph that describes the chain without analyzing WHY it matters for the stock (earnings risk, margin trajectory, competitive durability). E.g., don't just say "TSMC is a single-source supplier" — must explain what this concentration means for earnings risk.
+        - **Peer and historical context**: When citing supply chain metrics (inventory days, working capital ratios, supplier concentration, capex intensity), are they contextualized against peers or the company's own history? A number without context is a fact; a number with context is insight. Flag naked metrics.
+        - **Source triangulation**: Claims confirmed by 2+ sources stated with confidence; single-source claims qualified with attribution; conflicting sources acknowledged. Flag unverifiable estimates presented as established facts — analyst estimates must be explicitly flagged as such.
+        - **Relevance**: Would a PM skip any paragraph? Flag filler, generic supply chain descriptions that could apply to any company, or trivial operational details. Flag repetition.
+        - **Missing analysis**: Significant supply chain topics in source material (SEC filings, research findings) absent from the draft?
+        - **Heading format**: Section MUST start with `## 4. Supply Chain Positioning` as the first line.
+        - **Style precision**: Use proper em-dashes (—), not double hyphens (--). Flag formulaic transitions ("For context", "It is worth noting", "Importantly"). Paragraphs should open with the subject or claim, not a meta-comment. No LLM tells, no hedging, no bullet-point lists (tables fine).
+        - **Number formatting**: Stock prices to 2 decimals, market cap in billions with 1 decimal, percentages to 1 decimal. Large numbers in readable form. Revenue labels fiscal year.
         - Compliance with the style guide at ../../STYLE.md
 
         Write a numbered list of specific issues, ordered by importance.
@@ -1493,7 +1577,7 @@ tasks:
     type: claude
     depends_on: [append_index]
     config:
-      max_budget_usd: 1.50
+      max_budget_usd: 2.00
       system: "You are a senior equity research analyst writing a professional report. Read and follow the style guide at ../../STYLE.md."
       disallowed_tools: [WebSearch, WebFetch, Agent, Skill, yfinance, alphavantage, brave-search, wikipedia, openbb-mcp, playwright, fetch, filesystem]
       artifacts_inline:
@@ -1532,8 +1616,6 @@ tasks:
         - If sources conflict: acknowledge the discrepancy and explain which you weight more heavily,
           per the Source Reliability Hierarchy in STYLE.md
 
-        {% if SHORT %}LENGTH GUIDANCE: Aim for 200-400 words. Be concise — key points only, minimal narrative.{% endif %}
-        {% if LONG %}LENGTH GUIDANCE: Aim for 1500-2500 words. Provide comprehensive detail, rich narrative, and thorough analysis.{% endif %}
         Write Section 5 of an equity research report on ${ticker}: Financial Strength.
 
         Cover:
@@ -1555,8 +1637,8 @@ tasks:
         Save results in markdown format to drafts/section_5_financial.md
       hard_checks:
         - "startswith: ## 5. Financial Strength"
-      hard_check_retries: 0
-      n_iterations: 0
+      hard_check_retries: 2
+      n_iterations: 1
       critic_prompt: |
         Read the draft section at ${draft_path} carefully and critique it for an equity research report.
 
@@ -1567,7 +1649,8 @@ tasks:
 
           1. Retrieve the indexed source material for this section:
             Run: uv run python skills/search_index/search_index.py --all --workdir ${workdir} --sections financial
-          2. Read relevant structured artifacts in artifacts/ (JSON, CSV) for specific numbers.
+          2. Read relevant structured artifacts in artifacts/ (JSON, CSV) for specific numbers —
+             especially income_statement.csv, balance_sheet.csv, cash_flow.csv, and key_ratios.csv.
           3. For each factual claim in the draft, output a verification entry:
             - **Claim**: Quote the specific claim from the draft
             - **Source**: Cite the source chunk ID or artifact file and the relevant text
@@ -1575,14 +1658,36 @@ tasks:
             - **Detail**: If CONTRADICTED, state what the source actually says.
               If UNSUPPORTED, suggest search queries that might find evidence.
 
+        ## Completeness check
+
+        Verify all required elements are present with specific numbers from financial statements:
+        - [ ] Financial leverage analysis: debt levels, interest obligations, credit ratings, debt maturity profile
+        - [ ] Operating leverage analysis: fixed vs. variable cost structure, scalability, margin sensitivity to revenue changes
+        - [ ] Cash flow generation: free cash flow trends, cash conversion, operating cash flow quality
+        - [ ] Working capital dynamics: receivables, inventory, payables trends and efficiency
+        - [ ] Capital allocation strategy: dividends, buybacks, reinvestment priorities, M&A spending
+        - [ ] Multi-year financial trends with specific numbers from income statement, balance sheet, and cash flow statement
+        - [ ] Peer comparison context: margins, returns, leverage ratios vs. comparable companies
+        - [ ] At least one explicit sensitivity scenario (e.g., "if revenue declines X%, FCF would fall to $Y")
+        Flag any element that is missing or shallow.
+
+        ## Length check
+
+        Count the words. Target: 1500-2200 words. Flag if outside this range.
+
         ## Quality evaluation
 
-        Also evaluate for:
-        - Clarity and readability
-        - Missing or incomplete analysis — topics covered in the source material but absent from the draft
-        - Unsupported claims or speculation not grounded in sources
-        - Repetition
-        - Professional tone and formatting
+        Evaluate for:
+        - **Analytical framing ("be an analyst, not a reporter")**: For every key metric, is the investment implication stated? Flag paragraphs that only present financial data without connecting them to earnings power, risk, or valuation. E.g., don't just state margin expanded — explain what it signals about operating leverage or competitive position.
+        - **No-repeat rule**: Flag any data point or metric that appears in more than one subsection. Each number should appear exactly once. Flag the same numbers repeated in the peer comparison table AND in prose.
+        - **Single peer table**: There should be ONE peer comparison table benchmarking against 3-5 peers. Flag if peer data is scattered across multiple tables or subsections.
+        - **No bullet-point lists**: Flag any bullet-point lists — all analysis must be in prose paragraphs. Data tables are encouraged.
+        - **Source grounding**: Are financial metrics evidenced with specific data from the CSV artifacts rather than asserted? Are numbers contextualized vs. peers (from key_ratios.csv), vs. history, vs. expectations?
+        - **Relevance**: Would a PM skip any paragraph? Flag filler, generic financial commentary, or routine metrics that don't serve the investment case. Flag repetition.
+        - **Missing analysis**: Significant financial topics in source material (SEC filings, financial CSVs, research findings) absent from the draft?
+        - **Heading format**: Section MUST start with `## 5. Financial Strength` as the first line. Use ### for subsection headings.
+        - **Number formatting**: Stock prices to 2 decimals, market cap/revenue/earnings in readable form ($4.7 billion, $312 million), percentages to 1 decimal, ratios to 1 decimal. Revenue labels fiscal year. Attribution sparingly — once per source type.
+        - **Style**: No LLM tells, no hedging, no passive voice, no weasel words. Data tables well-formatted with aligned columns and clear labels.
         - Compliance with the style guide at ../../STYLE.md
 
         Write a numbered list of specific issues, ordered by importance.
@@ -1622,7 +1727,7 @@ tasks:
     type: claude
     depends_on: [append_index]
     config:
-      max_budget_usd: 1.50
+      max_budget_usd: 2.00
       system: "You are a senior equity research analyst writing a professional report. Read and follow the style guide at ../../STYLE.md."
       disallowed_tools: [WebSearch, WebFetch, Agent, Skill, yfinance, alphavantage, brave-search, wikipedia, openbb-mcp, playwright, fetch, filesystem]
       artifacts_inline:
@@ -1661,8 +1766,6 @@ tasks:
         - If sources conflict: acknowledge the discrepancy and explain which you weight more heavily,
           per the Source Reliability Hierarchy in STYLE.md
 
-        {% if SHORT %}LENGTH GUIDANCE: Aim for 200-400 words. Be concise — key points only, minimal narrative.{% endif %}
-        {% if LONG %}LENGTH GUIDANCE: Aim for 1500-2200 words. Provide comprehensive detail, rich narrative, and thorough analysis.{% endif %}
         Write Section 6 of an equity research report on ${ticker}: Valuation.
 
         Cover:
@@ -1686,8 +1789,8 @@ tasks:
         Save results in markdown format to drafts/section_6_valuation.md
       hard_checks:
         - "startswith: ## 6. Valuation"
-      hard_check_retries: 0
-      n_iterations: 0
+      hard_check_retries: 2
+      n_iterations: 1
       critic_prompt: |
         Read the draft section at ${draft_path} carefully and critique it for an equity research report.
 
@@ -1698,7 +1801,8 @@ tasks:
 
           1. Retrieve the indexed source material for this section:
             Run: uv run python skills/search_index/search_index.py --all --workdir ${workdir} --sections valuation
-          2. Read relevant structured artifacts in artifacts/ (JSON, CSV) for specific numbers.
+          2. Read relevant structured artifacts in artifacts/ (JSON, CSV) for specific numbers —
+             especially key_ratios.csv, analyst_recommendations.json, income_statement.csv.
           3. For each factual claim in the draft, output a verification entry:
             - **Claim**: Quote the specific claim from the draft
             - **Source**: Cite the source chunk ID or artifact file and the relevant text
@@ -1706,14 +1810,33 @@ tasks:
             - **Detail**: If CONTRADICTED, state what the source actually says.
               If UNSUPPORTED, suggest search queries that might find evidence.
 
+        ## Completeness check
+
+        Verify all required elements are present with specific data:
+        - [ ] Valuation methodologies: income-based (DCF with key assumptions), asset-based (book value, sum of parts), market-based (peer multiples, comps), and LBO analysis where applicable
+        - [ ] Key valuation inputs: growth rates, margins, discount rates, terminal value assumptions — with specific numbers
+        - [ ] Peer multiples comparison table: company name, P/E, EV/EBITDA, EV/Revenue — using specific values from key_ratios.csv for named peers
+        - [ ] Historical valuation context: how current multiples compare to the stock's own 3-5 year historical averages (premium/discount)
+        - [ ] Analyst ratings and opinions: consensus rating, price target range, recent rating changes, whether opinions are polarized or clustered
+        - [ ] Stock characteristics: volatility (beta), liquidity, institutional ownership, hedge fund ownership, meme stock status, macro sensitivities
+        Flag any element that is missing or shallow.
+
+        ## Length check
+
+        Count the words. Target: 1500-2200 words. Flag if outside this range.
+
         ## Quality evaluation
 
-        Also evaluate for:
-        - Clarity and readability
-        - Missing or incomplete analysis — topics covered in the source material but absent from the draft
-        - Unsupported claims or speculation not grounded in sources
-        - Repetition
-        - Professional tone and formatting
+        Evaluate for:
+        - **Investment-case framing ("be an analyst, not a reporter")**: For every valuation metric or multiple, is the investment implication stated? Don't just state "trades at 16.4x forward P/E" — must explain what that multiple signals about how the market is pricing the stock. Flag any naked multiple without analytical context.
+        - **No-repeat rule**: Flag any key multiple (forward P/E, EV/EBITDA, etc.) that appears with full context more than once. Each multiple should be stated once in its most relevant subsection; later references should use a different lens (growth-adjusted, discount to history) rather than restating. Flag the same thesis or conclusion restated in different words across subsections.
+        - **No bullet-point lists**: Flag any bullet-point lists — all analysis must be in prose paragraphs. Tables are fine and encouraged.
+        - **Source grounding**: Are valuation conclusions evidenced with data (specific multiples, growth-adjusted ratios, scenario analysis) rather than asserted? Are numbers contextualized vs. peers, vs. own history, vs. growth expectations?
+        - **Relevance**: Would a PM skip any paragraph? Flag filler, textbook valuation theory, or generic commentary. Flag the same multiples repeated across subsections.
+        - **Missing analysis**: Significant valuation topics in source material absent from the draft?
+        - **Heading format**: Section MUST start with `## 6. Valuation` as the first line. Use ### for subsection headings.
+        - **Number formatting**: Stock prices to 2 decimals, revenue/earnings in readable form ($4.7 billion, $312 million), percentages to 1 decimal, ratios to 1 decimal. Revenue labels fiscal year. Attribution sparingly — once per source type.
+        - **Style**: No LLM tells, no hedging, no passive voice. Data tables well-formatted with aligned columns and clear labels.
         - Compliance with the style guide at ../../STYLE.md
 
         Write a numbered list of specific issues, ordered by importance.
@@ -1753,7 +1876,7 @@ tasks:
     type: claude
     depends_on: [append_index]
     config:
-      max_budget_usd: 1.50
+      max_budget_usd: 2.00
       system: "You are a senior equity research analyst writing a professional report. Read and follow the style guide at ../../STYLE.md."
       disallowed_tools: [WebSearch, WebFetch, Agent, Skill, yfinance, alphavantage, brave-search, wikipedia, openbb-mcp, playwright, fetch, filesystem]
       artifacts_inline:
@@ -1788,8 +1911,6 @@ tasks:
         - If sources conflict: acknowledge the discrepancy and explain which you weight more heavily,
           per the Source Reliability Hierarchy in STYLE.md
 
-        {% if SHORT %}LENGTH GUIDANCE: Aim for 200-400 words. Be concise — key points only, minimal narrative.{% endif %}
-        {% if LONG %}LENGTH GUIDANCE: Aim for 2000-2800 words. Provide comprehensive detail, rich narrative, and thorough analysis.{% endif %}
         Write Section 7 of an equity research report on ${ticker}: Risks.
 
         Use the comprehensive research data available. Key sources are in the LanceDB index (query via search_index.py above).
@@ -1817,8 +1938,8 @@ tasks:
         Save results in markdown format to drafts/section_7_risk_news.md
       hard_checks:
         - "startswith: ## 7. Risks"
-      hard_check_retries: 0
-      n_iterations: 0
+      hard_check_retries: 2
+      n_iterations: 1
       critic_prompt: |
         Read the draft section at ${draft_path} carefully and critique it for an equity research report.
 
@@ -1829,7 +1950,8 @@ tasks:
 
           1. Retrieve the indexed source material for this section:
             Run: uv run python skills/search_index/search_index.py --all --workdir ${workdir} --sections risk_news
-          2. Read relevant structured artifacts in artifacts/ (JSON, CSV) for specific numbers.
+          2. Read relevant structured artifacts in artifacts/ (JSON, CSV) for specific numbers —
+             especially analyst_recommendations.json, 8k_summary.json, technical_analysis.json.
           3. For each factual claim in the draft, output a verification entry:
             - **Claim**: Quote the specific claim from the draft
             - **Source**: Cite the source chunk ID or artifact file and the relevant text
@@ -1837,14 +1959,38 @@ tasks:
             - **Detail**: If CONTRADICTED, state what the source actually says.
               If UNSUPPORTED, suggest search queries that might find evidence.
 
+        ## Completeness check
+
+        Verify all required elements are present with specific data (dates, dollar amounts, named entities):
+        - [ ] Recent corporate developments and their significance — specific dates, figures, and why each matters
+        - [ ] Regulatory actions, legal proceedings, and compliance risks — specific cases, agencies, potential financial impact
+        - [ ] Strategic partnerships, M&A activity, and competitive dynamics — named counterparties, deal terms, strategic rationale
+        - [ ] Analyst sentiment shifts and institutional ownership changes — specific rating changes (firm name, old → new rating, date, price target change) woven into relevant subsections, not isolated
+        - [ ] Operational risks (execution, technology, supply chain)
+        - [ ] Financial risks (leverage, currency, liquidity, capital allocation)
+        - [ ] Regulatory risks (antitrust, export controls, data privacy, sanctions)
+        - [ ] Market risks (cyclicality, macro sensitivity, competitive disruption)
+        Flag any element that is missing or shallow.
+
+        ## Length check
+
+        Count the words. Target: 2000-2800 words. Flag if outside this range.
+
         ## Quality evaluation
 
-        Also evaluate for:
-        - Clarity and readability
-        - Missing or incomplete analysis — topics covered in the source material but absent from the draft
-        - Unsupported claims or speculation not grounded in sources
-        - Repetition
-        - Professional tone and formatting
+        Evaluate for:
+        - **Risk prioritization**: Are risks prioritized by materiality (impact on earnings, valuation, or competitive position) rather than presented as a flat list? For each major risk, does it assess probability and magnitude, identify mitigating factors, and explain how the market is currently pricing it?
+        - **Known vs underappreciated**: Does it distinguish between well-known risks already priced in vs. underappreciated risks the market may be ignoring? Flag flat risk lists with no prioritization.
+        - **Tone exemplar adherence**: Target the level of "fact → implication → market-pricing judgment." E.g., "The $5.5 billion H20 charge quantifies the financial cost of export control whiplash, but the strategic damage — permanent cession of a $30 billion market to Huawei — is harder to measure and almost certainly underpriced." Flag risks that stop at description without implication and pricing judgment.
+        - **Opening**: Section must open with a direct analytical claim about risk exposure — flag if it opens with a self-referential statement like "This section covers..." or "What follows prioritizes..."
+        - **No bullet-point lists**: Flag any bullet-point lists — all analysis must be in prose paragraphs. Tables are fine.
+        - **Risk category separation**: Are risks from different categories (regulatory, operational, financial, market) clearly separated without overlap? Flag same risk point made in different words across subsections.
+        - **Source grounding**: Are risk claims grounded in sources? Are opinions distinguished from facts? Flag unsupported speculation.
+        - **Relevance**: Would a PM skip any paragraph? Flag filler, generic risk language that could apply to any company, or routine business risks that wouldn't move the stock 10%+.
+        - **Missing analysis**: Significant risk topics in source material (SEC filings, 8-K summaries, research findings, news) absent from the draft?
+        - **Heading format**: Section MUST start with `## 7. Risks` as the first line. Use ### for subsection headings.
+        - **Number formatting**: Stock prices to 2 decimals, revenue/earnings in readable form, percentages to 1 decimal, ratios to 1 decimal. Revenue labels fiscal year. Attribution sparingly.
+        - **Style**: No LLM tells, no hedging, no passive voice, no weasel words. Data tables well-formatted.
         - Compliance with the style guide at ../../STYLE.md
 
         Write a numbered list of specific issues, ordered by importance.
@@ -1886,7 +2032,7 @@ tasks:
     config:
       system: "You are a senior equity research editor specializing in report consistency and accuracy."
       model: claude-sonnet-4-6
-      max_budget_usd: 0.50
+      max_budget_usd: 2.00
       disallowed_tools: [WebSearch, WebFetch, Agent, Skill, Bash, yfinance, alphavantage, brave-search, wikipedia, openbb-mcp, playwright, fetch, filesystem]
       artifacts_inline:
         - artifacts/manifest.json
@@ -1972,8 +2118,6 @@ tasks:
       prompt: |
         ${artifact_context_inline}
 
-        {% if SHORT %}LENGTH GUIDANCE: Aim for 100-200 words. Be concise — key takeaway only.{% endif %}
-        {% if LONG %}LENGTH GUIDANCE: Aim for 500-800 words. Provide a thorough synthesis of all key themes.{% endif %}
         read the report body at artifacts/assembled_body.md carefully and write a concluding 1-3 short paragraphs < 500 words total.
             • Start with title header "## Conclusion: Investment Thesis"
             • Summarize the company's strategic position and the stock's investment risk/reward profile
@@ -1985,7 +2129,7 @@ tasks:
       hard_checks:
         - "startswith: ## Conclusion: Investment Thesis"
         - "max_length: 1500"
-      hard_check_retries: 0
+      hard_check_retries: 2
       rewrite_prompt: |
         Read the current draft at ${draft_path} and the critique at ${critique_path}.
         Address each issue identified. Save the revised version to ${rewrite_path}.
@@ -2047,7 +2191,7 @@ tasks:
     config:
       system: "You are a senior equity research editor with expertise in financial analysis and report quality. Read and follow the style guide at ../../STYLE.md."
       model: claude-sonnet-4-6
-      max_budget_usd: 1.00
+      max_budget_usd: 2.00
       disallowed_tools: [WebSearch, WebFetch, Agent, Skill, Bash, yfinance, alphavantage, brave-search, wikipedia, openbb-mcp, playwright, fetch, filesystem]
       artifacts_inline:
         - artifacts/manifest.json
@@ -2101,7 +2245,7 @@ tasks:
     config:
       system: "You are a senior equity research analyst revising a report based on editorial feedback. Read and follow the style guide at ../../STYLE.md."
       model: claude-sonnet-4-6
-      max_budget_usd: 10.00
+      max_budget_usd: 2.00
       timeout: 3600
       pre_copy:
         - from: artifacts/report_body.md
@@ -2164,7 +2308,7 @@ tasks:
     config:
       system: "You are an independent report quality assessor for institutional equity research."
       model: claude-sonnet-4-6
-      max_budget_usd: 0.50
+      max_budget_usd: 2.00
       disallowed_tools: [WebSearch, WebFetch, Agent, Skill, Bash, yfinance, alphavantage, brave-search, wikipedia, openbb-mcp, playwright, fetch, filesystem]
       artifacts_inline:
         - artifacts/manifest.json
