@@ -1662,27 +1662,30 @@ tasks:
           per the Source Reliability Hierarchy in STYLE.md
 
         {% if SHORT %}LENGTH GUIDANCE: Aim for 200-400 words. Be concise — key points only, minimal narrative.{% endif %}
-        {% if LONG %}LENGTH GUIDANCE: Aim for 1500-2500 words. Provide comprehensive detail, rich narrative, and thorough analysis.{% endif %}
+        {% if LONG %}LENGTH GUIDANCE: Aim for 1500-2200 words. Provide comprehensive detail, rich narrative, and thorough analysis.{% endif %}
         Write Section 6 of an equity research report on ${ticker}: Valuation.
 
         Cover:
         • Identify appropriate valuation methodologies, including income-based (e.g., DCF), asset-based (e.g. book value and sum of parts), market-based (e.g. peer multiples and comparisons), and LBO analysis
         • Highlight important valuation inputs and metrics (growth rates, margins, discount rates, terminal value assumptions).
+        • Include a peer multiples comparison table with columns for company name, P/E, EV/EBITDA, and EV/Revenue — use specific values from key_ratios.csv for named peers.
+        • Provide historical valuation context: compare current multiples to the stock's own historical averages (e.g., 3-year or 5-year) and explain whether it trades at a premium or discount to its own history.
         • Summarize current ratings and analyst opinions, including recent changes. Note if the stock is widely covered and whether opinions are polarized or clustered around a consensus.
         • Note the stock's volatility, liquidity, if it is widely covered and owned, if it is a hedge fund story stock or meme stock, what macro factors it is sensitive to
 
         Use a straightforward, factual tone throughout the analysis. Focus on data and observable facts rather than speculation.
+        Do not use bullet-point lists in the output — use prose paragraphs and tables only.
 
         **Investment-case framing**: For every valuation metric or multiple you present, explain what it implies for the investment case. Do not just state "NVDA trades at 16.4x forward P/E" — explain what that multiple signals about how the market is pricing the stock (e.g., "the 16.4x forward P/E — a 53% discount to the five-year average — prices in meaningful cycle risk despite accelerating earnings, suggesting upside if datacenter demand sustains"). Every number should answer "so what does this mean for whether to own the stock?"
 
         Begin the section with a top-level heading in this exact format: ## 6. Valuation
-        Use ## for subsection headings within.
+        Use ### for subsection headings within.
 
         Save results in markdown format to drafts/section_6_valuation.md
       hard_checks:
         - "startswith: ## 6. Valuation"
-      hard_check_retries: 2
-      n_iterations: 1
+      hard_check_retries: 0
+      n_iterations: 0
       critic_prompt: |
         Read the draft section at ${draft_path} carefully and critique it for an equity research report.
 
@@ -1806,8 +1809,8 @@ tasks:
         Save results in markdown format to drafts/section_7_risk_news.md
       hard_checks:
         - "startswith: ## 7. Risks"
-      hard_check_retries: 2
-      n_iterations: 1
+      hard_check_retries: 0
+      n_iterations: 0
       critic_prompt: |
         Read the draft section at ${draft_path} carefully and critique it for an equity research report.
 
@@ -1974,7 +1977,7 @@ tasks:
       hard_checks:
         - "startswith: ## Conclusion: Investment Thesis"
         - "max_length: 1500"
-      hard_check_retries: 2
+      hard_check_retries: 0
       rewrite_prompt: |
         Read the current draft at ${draft_path} and the critique at ${critique_path}.
         Address each issue identified. Save the revised version to ${rewrite_path}.
