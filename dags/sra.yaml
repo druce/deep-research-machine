@@ -1807,7 +1807,6 @@ tasks:
 
         **Risk prioritization**: Prioritize risks by materiality — impact on earnings, valuation, or competitive position. For each major risk, assess probability and magnitude, identify mitigating factors, and explain how the market is currently pricing it. Distinguish between well-known risks already priced in vs. underappreciated risks the market may be ignoring.
 
-        Use a straightforward, factual tone throughout the analysis. Focus on data and observable facts rather than speculation.
         Do not use bullet-point lists in the output — use prose paragraphs and tables only.
         Tone exemplar: "The $5.5 billion H20 charge quantifies the financial cost of export control whiplash, but the strategic damage — permanent cession of a $30 billion market to Huawei — is harder to measure and almost certainly underpriced." Aim for this level of analytical specificity throughout: fact, then implication, then market-pricing judgment.
 
